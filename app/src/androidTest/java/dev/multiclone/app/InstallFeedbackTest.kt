@@ -64,7 +64,7 @@ class InstallFeedbackTest {
             app.sendBroadcast(success)
             withTimeout(15000) { while (prefs.getBoolean("failed", true)) delay(50) }
             instrumentation.waitForIdleSync()
-            instrumentation.runOnMainSync { assertFalse(model.messageIsError); assertTrue(model.message.startsWith("Installed successfully")) }
+            instrumentation.runOnMainSync { assertFalse(model.messageIsError); assertEquals("Successful installation must not show a banner", "", model.message) }
         } finally {
             instrumentation.runOnMainSync { store.clear() }
             // Wait for the receiver's asynchronous Room write before removing the fixture.

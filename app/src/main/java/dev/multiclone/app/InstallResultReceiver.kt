@@ -39,7 +39,7 @@ class InstallResultReceiver : BroadcastReceiver() {
             try {
                 app.ready.await()
                 app.queue.withCloneMutation {
-                    app.dao.clone(id)?.let { app.dao.saveClone(it.copy(state = if (success) "INSTALLED" else "READY", message = message,
+                    app.dao.clone(id)?.let { app.dao.saveClone(it.copy(state = if (success) "INSTALLED" else "READY", message = if (success) "" else message,
                         wasInstalled = it.wasInstalled || success)) }
                 }
             }

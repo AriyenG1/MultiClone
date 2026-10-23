@@ -23,15 +23,17 @@ class TabletUiTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val device = UiDevice.getInstance(instrumentation)
     private val app get() = instrumentation.targetContext.applicationContext as MultiCloneApplication
-    private fun text(value: String) = device.wait(Until.findObject(By.text(value)), 15000)
-        ?: error("Missing UI: $value")
+    private fun text(value: String): UiObject2 {
+        if (android.os.Build.VERSION.SDK_INT >= 33) instrumentation.uiAutomation.clearCache()
+        return device.wait(Until.findObject(By.text(value)), 15000) ?: error("Missing UI: $value")
+    }
     private fun shot(name: String) {
         device.takeScreenshot(File(File(app.filesDir, "ui-proof").apply { mkdirs() }, "$name.png"))
     }
     private suspend fun awaitState(check: () -> Boolean) {
         withTimeout(90000) { while (!withContext(Dispatchers.Main) { check() }) delay(100) }
     }
-    private suspend fun withTablet(block: suspend (ApkSource, MultiCloneViewModel) -> Unit) {
+    private suspend fun withTablet(selectSource: Boolean = true, block: suspend (ApkSource, MultiCloneViewModel) -> Unit) {
         app.ready.await()
         val prefs = AppPreferences(app)
         val previousSource = prefs.selectedSource.first()
@@ -70,8 +72,11 @@ class TabletUiTest {
                 fresh
             }
             device.waitForIdle()
-            text("UI design fixture")
             val model = withContext(Dispatchers.Main) { ViewModelProvider(activity)[MultiCloneViewModel::class.java] }
+            if (selectSource) {
+                withContext(Dispatchers.Main) { model.select(source.id) }
+                text("UI design fixture")
+            }
             withContext(Dispatchers.Main) { assertTrue("Must test the current Activity's ViewModel", model.viewModelScope.isActive) }
             block(source, model)
         } finally {
@@ -213,8 +218,85 @@ class TabletUiTest {
             assertTrue(device.hasObject(By.textContains("Account: Preserved account")))
             app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             withContext(Dispatchers.Main) { model.updateClone(app.dao.clone(row.id)!!) }
-            awaitState { row.id !in model.cloneOperations && model.message.contains("up to date") }
+            awaitState { row.id !in model.cloneOperations && model.cloneUpdateNotice?.text?.contains("up to date") == true }
             assertEquals(jobsBefore, app.dao.observeJobs().first().count { it.updateCloneId == row.id })
+            text("Details") // The new floating notice, rather than a persistent status banner.
+            shot("update-notice")
+            delay(5500)
+            withContext(Dispatchers.Main) { assertNull("Update feedback expires without dismissal", model.cloneUpdateNotice) }
+        }
+    }
+
+    private fun tagged(tag: String): UiObject2 {
+        fun clearCache() { if (android.os.Build.VERSION.SDK_INT >= 33) instrumentation.uiAutomation.clearCache() }
+        fun scroll(action: Int): Boolean {
+            clearCache()
+            fun find(node: android.view.accessibility.AccessibilityNodeInfo?): android.view.accessibility.AccessibilityNodeInfo? {
+                if (node == null) return null
+                if (node.isScrollable && node.packageName?.toString() == app.packageName) return node
+                for (i in 0 until node.childCount) find(node.getChild(i))?.let { return it }
+                return null
+            }
+            return find(instrumentation.uiAutomation.rootInActiveWindow)?.performAction(action) == true
+        }
+        clearCache()
+        device.findObject(By.res(tag))?.let { return it }
+        repeat(6) {
+            if (scroll(android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) android.os.SystemClock.sleep(250)
+        }
+        repeat(12) {
+            clearCache()
+            device.findObject(By.res(tag))?.let { return it }
+            scroll(android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+            android.os.SystemClock.sleep(300)
+        }
+        device.executeShellCommand("screencap -p /data/local/tmp/multiclone-missing.png")
+        shot("missing-$tag")
+        device.dumpWindowHierarchy(File(app.filesDir, "ui-proof/missing-$tag.xml"))
+        error("Missing control: $tag")
+    }
+
+    @Test fun freshCreateHasNoImportHistoryAndSmallBatchesKeepIndividualNames(): Unit = runBlocking {
+        withTablet(selectSource = false) { source, model ->
+            assertEquals("", withContext(Dispatchers.Main) { model.selectedId })
+            assertFalse(device.hasObject(By.text("UI design fixture")))
+            assertFalse(device.hasObject(By.text("Use a previous import")))
+            assertFalse(device.hasObject(By.text("MultiClone")))
+            assertFalse(device.hasObject(By.text("On-device")))
+            assertFalse(device.hasObject(By.text("Settings")))
+            val settings = device.wait(Until.findObject(By.desc("Settings")), 5000)!!
+            assertTrue("Settings belongs at the bottom of the rail", settings.visibleCenter.y > device.displayHeight * .75)
+            shot("create-empty")
+            settings.click()
+            text("Signing keys & device")
+            text("Create").click()
+            withContext(Dispatchers.Main) { model.select(source.id) }
+            assertEquals("", tagged("clone-count").text)
+            assertEquals("", tagged("clone-label").text)
+            tagged("clone-count").text = "5"
+            assertFalse(device.hasObject(By.text("Choose custom icon")))
+            tagged("clone-name-5")
+            tagged("clone-count").text = "6"
+            tagged("clone-label").text = "Large batch"
+            assertFalse(device.hasObject(By.text("Clone 1 name")))
+            tagged("clone-count").text = "2"
+            tagged("clone-name-1").text = "Personal copy"
+            tagged("clone-name-2").text = "Work copy"
+            device.executeShellCommand("wm size 800x1280")
+            delay(1200)
+            assertEquals("Personal copy", tagged("clone-name-1").text)
+            assertEquals("Work copy", tagged("clone-name-2").text)
+            shot("create-individual-names")
+            tagged("create-clones").click()
+            awaitState { model.generatedCloneIds.size == 2 && !model.busy }
+            val rows = app.dao.clones().filter { it.id in model.generatedCloneIds }
+            assertEquals(setOf("Personal copy", "Work copy"), rows.map { it.label }.toSet())
+            assertTrue(rows.all { JsonCodec.plan(it.plan).icon == null })
+            withContext(Dispatchers.Main) { assertEquals("", model.selectedId); model.dismissInstallPrompt() }
+            assertTrue(device.wait(Until.gone(By.text("Your clones are ready")), 5000))
+            withContext(Dispatchers.Main) { model.select(source.id) }
+            assertEquals("", tagged("clone-count").text)
+            assertEquals("", tagged("clone-label").text)
         }
     }
 

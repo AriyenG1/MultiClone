@@ -154,12 +154,13 @@ class CloneLibraryTest {
             db.execSQL("INSERT INTO jobs VALUES ('job','source','Completed job',1,1,'DONE',NULL,NULL,'',1)")
             db.version = 1
         }
-        val database = Room.databaseBuilder(app, CloneDatabase::class.java, name).addMigrations(CloneDatabase.MIGRATION_1_2).build()
+        val database = Room.databaseBuilder(app, CloneDatabase::class.java, name).addMigrations(CloneDatabase.MIGRATION_1_2, CloneDatabase.MIGRATION_2_3).build()
         try {
             assertTrue(database.clones().clone(id)!!.wasInstalled)
             assertEquals("Existing clone", database.clones().clone(id)?.label)
             assertNotNull(database.clones().source("source"))
             assertEquals("DONE", database.clones().job("job")?.state)
+            assertEquals("[]", database.clones().job("job")?.cloneNames)
         } finally { database.close(); app.deleteDatabase(name) }
     }
 }

@@ -1,6 +1,16 @@
-# MultiClone v0.1.5 — implementation and verification
+# MultiClone v0.1.6 — implementation and verification
 
-Build date: 23 October 2026. Signed APK: `artifacts/MultiClone-v0.1.5.apk`. Installation instructions: [TABLET_GUIDE.md](TABLET_GUIDE.md).
+Build date: 23 October 2026. Signed APK: `artifacts/MultiClone-v0.1.6.apk`. Installation instructions: [TABLET_GUIDE.md](TABLET_GUIDE.md).
+
+## v0.1.6 navigation, fresh Create and named batches
+
+The repeated MultiClone header, On-device chip and decorative rail logo are removed. Settings uses a labelled-for-accessibility cog without visible text, anchored at the bottom of the tablet rail. Compact windows retain bottom navigation. Installation success updates the installed status without a banner or redundant success message.
+
+Create starts without a selected source or old field values. It has no import-history chooser and does not reuse a saved source preference. A submitted batch resets the form; active drafts still survive destination changes and resizing/rotation. One clone can use a custom icon. Two to five copies get individual name fields; larger batches use a numbered prefix. Batches retain the original icon.
+
+Room schema 3 adds a default-empty cloneNames column to jobs, with a 2→3 migration preserving all existing source/clone/job records. Individual names persist through queue interruption/recovery. Existing schema-2 batches continue with their original prefix behavior. Signing identities, clone package names and app-private data are unchanged.
+
+Clone Update feedback uses a floating Material notice that expires after five seconds, including errors and repeated attempts. Installation/generation progress remains on the clone card while work continues. Details opened from a notice remain readable after the notice expires. See [the UI verification](ui/VERIFICATION.md).
 
 ## v0.1.5 clone updates and installation feedback
 

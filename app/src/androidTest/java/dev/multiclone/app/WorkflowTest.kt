@@ -15,6 +15,33 @@ import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class WorkflowTest {
+    @Test fun individualBatchNamesSurviveRecoveryAndBatchIconsAreIgnored() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val app = instrumentation.targetContext.applicationContext as MultiCloneApplication
+        app.ready.await()
+        val input = File(app.filesDir, "named-batch-fixture.apk")
+        instrumentation.context.assets.open("fixture.apk").use { source -> input.outputStream().use { source.copyTo(it) } }
+        val source = app.analyzer.analyze(listOf(input), "Named batch fixture")
+        app.dao.saveSource(SourceRow(source.id, source.label, source.packageName, JsonCodec.source(source)))
+        val names = listOf("Personal", "Work", "Travel", "Study", "Ariyen’s copy")
+        val id = app.queue.enqueue(source.id, "Named copies", 5, File(app.filesDir, "missing-batch-icon.png"), cloneNames = names)
+        assertNull("Batches must use the original icon", app.dao.job(id)!!.iconPath)
+        app.dao.saveJob(app.dao.job(id)!!.copy(state = "RUNNING"))
+        app.dao.recoverJobs()
+        assertEquals("PAUSED", app.dao.job(id)!!.state)
+        assertEquals(names.size, org.json.JSONArray(app.dao.job(id)!!.cloneNames).length())
+        app.dao.resumeJobs()
+        app.queue.run { }
+        assertEquals("DONE", app.dao.job(id)!!.state)
+        val copies = app.dao.clones().filter { it.sourceId == source.id }
+        assertEquals(names.toSet(), copies.map { it.label }.toSet())
+        assertTrue(copies.all { JsonCodec.plan(it.plan).icon == null })
+        try {
+            app.queue.enqueue(source.id, "Too many custom names", 6, null, cloneNames = names + "Sixth")
+            fail("More than five individually named copies must be refused")
+        } catch (_: IllegalArgumentException) { }
+    }
+
     @Test fun batchQueueRecoveryAndSigningBackup() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext.applicationContext as MultiCloneApplication

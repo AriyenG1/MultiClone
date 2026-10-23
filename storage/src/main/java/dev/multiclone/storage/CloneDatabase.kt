@@ -21,6 +21,7 @@ data class JobRow(
     val completed: Long = 0, val state: String = "QUEUED", val iconPath: String? = null,
     val updateCloneId: String? = null, val message: String = "",
     val createdAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(defaultValue = "'[]'") val cloneNames: String = "[]",
 )
 @Dao
 interface CloneDao {
@@ -44,7 +45,7 @@ interface CloneDao {
     @Query("DELETE FROM clones WHERE id=:id") suspend fun deleteClone(id: String)
     @Query("UPDATE jobs SET state='CANCELLED', message='Clone deleted.' WHERE updateCloneId=:id AND state IN ('QUEUED','RUNNING','PAUSED')") suspend fun cancelUpdates(id: String)
 }
-@Database(entities = [SourceRow::class, CloneRow::class, JobRow::class], version = 2, exportSchema = true)
+@Database(entities = [SourceRow::class, CloneRow::class, JobRow::class], version = 3, exportSchema = true)
 abstract class CloneDatabase : RoomDatabase() {
     abstract fun clones(): CloneDao
     companion object {
@@ -54,7 +55,12 @@ abstract class CloneDatabase : RoomDatabase() {
                 db.execSQL("UPDATE clones SET wasInstalled=1 WHERE state IN ('INSTALLED','TESTED') OR message='Not currently installed. Signing identity retained.'")
             }
         }
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE jobs ADD COLUMN cloneNames TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
         fun open(context: Context) = Room.databaseBuilder(context, CloneDatabase::class.java, "multiclone.db")
-            .addMigrations(MIGRATION_1_2).build()
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
     }
 }

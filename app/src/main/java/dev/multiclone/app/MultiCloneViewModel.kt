@@ -20,15 +20,25 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 data class CloneOperation(val label: String, val progress: Float? = null, val sessionId: Int? = null)
+data class CloneUpdateNotice(val text: String, val error: Boolean = false)
 
 class MultiCloneViewModel(application: Application) : AndroidViewModel(application) {
     val app = application as MultiCloneApplication
-    private val preferences = AppPreferences(app)
     val sources = app.dao.observeSources().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val clones = app.dao.observeClones().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val jobs = app.dao.observeJobs().map { rows -> rows.filter { it.state in setOf("RUNNING", "QUEUED", "PAUSED") } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val selectedId = preferences.selectedSource.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    var selectedId by mutableStateOf(""); private set
+    var formRevision by mutableIntStateOf(0); private set
+    var cloneUpdateNotice by mutableStateOf<CloneUpdateNotice?>(null); private set
+    private var noticeJob: Job? = null
+    private val updateInstalls = mutableSetOf<String>()
+    fun dismissCloneUpdateNotice() { noticeJob?.cancel(); cloneUpdateNotice = null }
+    private fun showCloneUpdateNotice(text: String, error: Boolean = false) {
+        noticeJob?.cancel()
+        cloneUpdateNotice = CloneUpdateNotice(text, error)
+        noticeJob = viewModelScope.launch { delay(5000); cloneUpdateNotice = null }
+    }
     var generatedCloneIds by mutableStateOf<Set<String>>(emptySet()); private set
     var installPromptOpen by mutableStateOf(false); private set
     private var autoOpenInstallPrompt = true
@@ -95,6 +105,10 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
     var cloneOperations by mutableStateOf<Map<String, CloneOperation>>(emptyMap()); private set
     var installRequest by mutableStateOf<CloneRow?>(null); private set
     fun takeInstallRequest(): CloneRow? = installRequest.also { installRequest = null }
+    fun installationPermissionNeeded(row: CloneRow) {
+        if (row.id in updateInstalls) showCloneUpdateNotice("Allow installation from MultiClone, return here, then tap Update again.")
+        else tell("Allow installation from MultiClone, then tap Install again.")
+    }
     private val updateGenerations = mutableSetOf<String>()
     private val mainHandler = Handler(Looper.getMainLooper())
     private fun operation(id: String, value: CloneOperation?) {
@@ -118,9 +132,18 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
     private val installResults = app.getSharedPreferences(InstallFeedback.PREFERENCES, 0)
     private val installListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         if (key == "revision") {
-            prefs.getString("cloneId", null)?.let { operation(it, null) }
-            message = prefs.getString("latest", "").orEmpty()
-            messageIsError = prefs.getBoolean("failed", false)
+            val id = prefs.getString("cloneId", null)
+            id?.let { operation(it, null) }
+            val failed = prefs.getBoolean("failed", false)
+            val feedback = prefs.getString("latest", "").orEmpty()
+            if (id != null && updateInstalls.remove(id)) {
+                if (failed) showCloneUpdateNotice(feedback, true)
+                else dismissCloneUpdateNotice()
+                message = ""
+            } else {
+                message = if (failed) feedback else ""
+            }
+            messageIsError = failed
             refreshInstalled()
         }
     }
@@ -137,7 +160,7 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
         refreshInstalled()
     }
     fun source(id: String): ApkSource? = sources.value.find { it.id == id }?.let { JsonCodec.source(it.json) }
-    fun select(id: String) { viewModelScope.launch { preferences.selectSource(id) } }
+    fun select(id: String) { selectedId = id }
     fun dismissAppPicker() { installedApps = null }
     fun loadApps() = action { installedApps = app.importer.installedApps() }
     fun importInstalled(packageName: String, label: String) {
@@ -147,17 +170,20 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
     fun importFiles(uris: List<Uri>) = action { saveSource(app.analyzer.analyze(app.importer.importFiles(uris))) }
     private suspend fun saveSource(source: ApkSource) {
         app.dao.saveSource(SourceRow(source.id, source.label, source.packageName, JsonCodec.source(source)))
-        preferences.selectSource(source.id)
+        withContext(Dispatchers.Main) { selectedId = source.id; icon = null; formRevision++ }
         message = if (source.buildable) "" else "This source is blocked. See the findings below."
     }
     fun importIcon(uri: Uri) = action { icon = app.importer.importIcon(uri); message = "Custom icon selected." }
     fun clearIcon() { icon = null }
-    fun enqueue(source: ApkSource, label: String, count: Long) = action {
-        app.queue.enqueue(source.id, label, count, icon)
+    fun enqueue(source: ApkSource, label: String, count: Long, cloneNames: List<String> = emptyList()) = action {
+        app.queue.enqueue(source.id, label, count, icon, cloneNames = cloneNames)
         withContext(Dispatchers.Main) {
             generatedCloneIds = emptySet()
             autoOpenInstallPrompt = true
             installPromptOpen = false
+            selectedId = ""
+            icon = null
+            formRevision++
         }
         withContext(Dispatchers.Main) { startQueue() }
         message = "Added to the local generation queue. Android will ask separately before installation."
@@ -192,8 +218,13 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
                     }
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) { operation(row.id, null) }
-                throw e
+                val updating = withContext(NonCancellable + Dispatchers.Main) {
+                    operation(row.id, null)
+                    updateInstalls.remove(row.id).also { updating ->
+                        if (updating && e !is CancellationException) showCloneUpdateNotice(e.message ?: "Could not prepare the update. Retry from Library.", true)
+                    }
+                }
+                if (!updating || e is CancellationException) throw e
             }
         }
     }
@@ -202,6 +233,7 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
         if (busy || cloneOperations.isNotEmpty() || installRequest != null) return
         messageIsError = false
         message = ""
+        showCloneUpdateNotice("Checking ${row.label} for updates…")
         operation(row.id, CloneOperation("Checking original app for updates…"))
         viewModelScope.launch {
             try {
@@ -234,13 +266,16 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
                     require(result.state == "DONE") { "Clone update ${result.state.lowercase()}: ${result.message}" }
                     app.dao.clone(row.id) ?: error("This clone was deleted.")
                 }
-                if (ready == null) message = "${row.label} is up to date with the installed original. Check its store for newer versions."
-                else installRequest = ready
+                if (ready == null) showCloneUpdateNotice("${row.label} is up to date. Check the original app’s store for newer versions.")
+                else {
+                    updateInstalls.add(row.id)
+                    showCloneUpdateNotice("${row.label} is ready to update. Confirm in Android to continue.")
+                    installRequest = ready
+                }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 updateGenerations.remove(row.id)
-                message = e.message ?: "Clone update failed. Retry from the library."
-                messageIsError = true
+                showCloneUpdateNotice(e.message ?: "Clone update failed. Retry from the library.", true)
             } finally { operation(row.id, null) }
         }
     }

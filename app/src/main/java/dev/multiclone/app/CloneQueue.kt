@@ -15,9 +15,12 @@ class CloneQueue(private val app: MultiCloneApplication) {
     private val runMutex = Mutex()
     private val cloneMutation = Mutex()
     suspend fun <T> withCloneMutation(block: suspend () -> T): T = cloneMutation.withLock { block() }
-    suspend fun enqueue(sourceId: String, name: String, count: Long, icon: File?, updateCloneId: String? = null): String {
+    suspend fun enqueue(sourceId: String, name: String, count: Long, icon: File?, updateCloneId: String? = null,
+        cloneNames: List<String> = emptyList()): String {
         require(count > 0) { "Enter a positive clone count." }
         require(name.isNotBlank() && name.length <= 80) { "Use a name between 1 and 80 characters." }
+        require(cloneNames.isEmpty() || (updateCloneId == null && count in 2..5 && cloneNames.size.toLong() == count &&
+            cloneNames.all { it.isNotBlank() && it.length <= 80 })) { "Enter a name using 1–80 characters for each clone (up to five)." }
         val source = JsonCodec.source(app.dao.source(sourceId)?.json ?: error("Import a source APK first."))
         require(source.buildable) { "This source has blocking compatibility findings." }
         require(source.parts.all { it.file.isFile }) { "Source APKs are missing. Import the source again." }
@@ -31,7 +34,8 @@ class CloneQueue(private val app: MultiCloneApplication) {
             require(source.versionCode >= clone.versionCode) { "Downgrades are unsupported. Select the same or a newer source version." }
         }
         val id = UUID.randomUUID().toString()
-        app.dao.saveJob(JobRow(id, sourceId, name.trim(), count, iconPath = icon?.absolutePath, updateCloneId = updateCloneId))
+        app.dao.saveJob(JobRow(id, sourceId, name.trim(), count, iconPath = if (count == 1L) icon?.absolutePath else null,
+            updateCloneId = updateCloneId, cloneNames = org.json.JSONArray(cloneNames.map(String::trim)).toString()))
         return id
     }
 
@@ -42,6 +46,8 @@ class CloneQueue(private val app: MultiCloneApplication) {
             val source = JsonCodec.source(app.dao.source(job.sourceId)?.json ?: error("Source metadata is missing."))
             var completed = job.completed
             try {
+                val names = org.json.JSONArray(job.cloneNames)
+                require(names.length() == 0 || (job.total in 2..5 && names.length().toLong() == job.total)) { "Saved batch names are invalid." }
                 while (completed < job.total && currentCoroutineContext().isActive) {
                     if (app.dao.job(job.id)?.state != "RUNNING") break
                     withCloneMutation {
@@ -49,7 +55,8 @@ class CloneQueue(private val app: MultiCloneApplication) {
                         val update = job.updateCloneId?.let { app.dao.clone(it) ?: error("Clone was removed.") }
                         require(update == null || source.versionCode >= update.versionCode) { "A newer clone artifact already exists. Downgrade refused." }
                         val oldPlan = update?.let { JsonCodec.plan(it.plan) }
-                        val label = if (job.total == 1L) job.label else "${job.label} ${completed + 1}"
+                        val label = if (names.length() > 0) names.getString(completed.toInt())
+                            else if (job.total == 1L) job.label else "${job.label} ${completed + 1}"
                         val plan = (oldPlan?.copy(label = label, icon = job.iconPath?.let(::File) ?: oldPlan.icon)
                             ?: ClonePlan.create(label, job.iconPath?.let(::File))).let {
                             it.copy(identityMap = app.transformer.identityMap(source, it.packageName) + it.identityMap)

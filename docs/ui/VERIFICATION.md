@@ -1,3 +1,20 @@
+# v0.1.6 navigation and Create verification — 23 October 2026
+
+- Project-local `:app:connectedDebugAndroidTest test lint`: successful. Eighteen Android checks executed successfully. One unchanged optional self-updater check requires a host-prepared higher-version APK and was not run (its JUnit assumption is rendered as a failure element by the XML writer; the Gradle run succeeds).
+- Four JVM signing/archive tests pass. Repository-wide lint passes with zero errors; existing warnings remain. Final debug build/lint and signed release packaging/inspection also pass after copy and saved-details refinements.
+- New UI coverage checks that a previously stored import preference does not populate a fresh Create screen, there is no repeated header/chip/import-history control, and the accessible Settings cog is at the bottom of the tablet rail without visible text.
+- The real Create controls cover empty fields, five individually named copies versus six using a prefix, exact labels after generating two copies, original batch icons, draft preservation after resizing and reset after submission.
+- New queue coverage verifies five individual names survive interrupted-job recovery, invalid larger named batches are rejected, and batch icon overrides are ignored. The migration check runs the 1→2→3 path and verifies old records/jobs survive with an empty names default. Existing engine/splits/Jetchat, backup, cleanup, update/cancellation and data-retention regressions pass.
+- Installer feedback checks require an empty success banner. The clone update test verifies that its floating notice disappears after 5.5 seconds without pressing dismiss.
+
+Evidence: [full Gradle log](v0.1.6/gradle-validation.txt), [raw Android results](v0.1.6/android-tests.xml), [focused Create workflow](v0.1.6/create-workflow.txt), [final build/lint](v0.1.6/final-check.txt), [signed release inspection](v0.1.6/release-inspection.json).
+
+Screenshots: [fresh Create](v0.1.6/create-empty.png), [individual names after resizing](v0.1.6/create-individual-names.png), [five-second Update notice](v0.1.6/update-notice.png), [signed release dark theme](v0.1.6/create-dark.png), [narrow 150% text](v0.1.6/create-compact-large-text.png). Empty/light/dark/compact captures use the signed APK; naming/notice captures use the test build. Samsung hardware policy, S Pen and live DeX behavior still require a physical-device pass.
+
+Room schema 3 adds only the jobs' default-empty names column. The release certificate matches v0.1.5; existing clone package/signing identities are retained. No dependency locks, verification metadata or signing credentials were changed.
+
+---
+
 # v0.1.5 Library and installation verification — 23 October 2026
 
 - Project-local `:app:connectedDebugAndroidTest test lint`: successful. Sixteen Android checks executed successfully, including the new original-to-clone update/cancellation/retry/data-retention flow, all engine/split/Jetchat, library, workflow and installer-feedback regressions. The optional self-updater test requiring a host-prepared higher-version APK was not run; its assumption is recorded as a failure element by the test XML writer even though the Gradle run succeeds. This unchanged optional handoff was verified for v0.1.4.

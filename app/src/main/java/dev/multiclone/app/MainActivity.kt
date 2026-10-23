@@ -23,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -30,6 +31,8 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -68,7 +71,7 @@ class MainActivity : ComponentActivity() {
             MultiCloneTheme { MultiCloneScreen(model,
                 importFiles = { picker.launch(arrayOf("*/*")) }, importIcon = { iconPicker.launch("image/*") },
                 install = { row -> if (!model.app.installer.canInstall()) {
-                    startActivity(model.app.installer.permissionIntent()); model.tell("Allow installation from MultiClone, then tap Install again.")
+                    startActivity(model.app.installer.permissionIntent()); model.installationPermissionNeeded(row)
                 } else model.install(row) },
                 uninstall = { row -> uninstall.launch(model.app.installer.uninstallIntent(row.packageName)) },
                 export = { row -> model.exportTarget = row; exportPicker.launch(row.label.replace(Regex("[^\\p{L}\\p{N}._ -]"), "_") + if (JsonCodec.artifacts(row.artifacts).size == 1) ".apk" else ".apks") },
@@ -102,52 +105,47 @@ private fun MultiCloneScreen(model: MultiCloneViewModel, importFiles: () -> Unit
     val sources by model.sources.collectAsStateWithLifecycle()
     val clones by model.clones.collectAsStateWithLifecycle()
     val jobs by model.jobs.collectAsStateWithLifecycle()
-    val selectedId by model.selectedId.collectAsStateWithLifecycle()
+    val selectedId = model.selectedId
     LaunchedEffect(model.installRequest, model.busy) {
         if (!model.busy) model.takeInstallRequest()?.let(install)
     }
     var tab by rememberSaveableInt()
     val screenStates = rememberSaveableStateHolder()
     var installDetailsOpen by rememberSaveable { mutableStateOf(false) }
+    var updateDetails by rememberSaveable { mutableStateOf<String?>(null) }
+    var updateDetailsError by rememberSaveable { mutableStateOf(false) }
     var backupMode by remember { mutableStateOf<Boolean?>(null) }
     var deleteTarget by remember { mutableStateOf<CloneRow?>(null) }
-    val selected = sources.find { it.id == selectedId } ?: sources.firstOrNull()
+    val selected = sources.find { it.id == selectedId }
     val source = remember(selected?.json) { selected?.let { JsonCodec.source(it.json) } }
     BackHandler(enabled = tab != 0) { tab = 0 }
     val pendingIds = model.generatedCloneIds
     val readyClones = clones.filter { it.id in pendingIds && it.artifacts != "[]" && it.state != "BUILDING" && it.state != "FAILED" }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
+        BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().semantics { testTagsAsResourceId = true }) {
             // Window constraints, not device identity or orientation: also works in Samsung split screen / DeX.
             val useRail = maxWidth >= 600.dp
-            val compactHeight = maxHeight < 480.dp
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.weight(1f)) {
-                    if (useRail) NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
-                        if (!compactHeight) {
-                            Spacer(Modifier.height(24.dp))
-                            AppMark()
-                            Spacer(Modifier.height(32.dp))
-                        } else Spacer(Modifier.height(8.dp))
-                        destinations.forEachIndexed { index, title ->
+                    if (useRail) NavigationRail(modifier = Modifier.fillMaxHeight(), containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+                        Spacer(Modifier.height(16.dp))
+                        destinations.take(2).forEachIndexed { index, title ->
                             NavigationRailItem(selected = tab == index, onClick = { tab = index },
                                 icon = { DestinationIcon(index) }, label = { Text(title) },
                                 modifier = Modifier.padding(vertical = 4.dp))
                         }
+                        Spacer(Modifier.weight(1f))
+                        NavigationRailItem(selected = tab == 2, onClick = { tab = 2 },
+                            icon = { DestinationIcon(2) }, alwaysShowLabel = false,
+                            modifier = Modifier.padding(bottom = 12.dp).semantics { contentDescription = "Settings" })
                     }
                     Column(Modifier.weight(1f)) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("MultiClone", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(50)) {
-                                Text("On-device", Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium)
-                            }
-                        }
                         if (model.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                         if (model.message.isNotBlank()) StatusMessage(model.message, model.messageIsError, onDismiss = { model.tell("") })
                         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                             screenStates.SaveableStateProvider(tab) {
                             when (tab) {
-                                0 -> CreatePanel(model, source, sources.map { it.id to it.label }, importFiles, importIcon, beforeQueue,
+                                0 -> CreatePanel(model, source, importFiles, importIcon, beforeQueue,
                                     Modifier.widthIn(max = 840.dp).fillMaxSize(),
                                     readyCount = readyClones.size, showReady = { model.openInstallPrompt() })
                                 1 -> DashboardPanel(clones, jobs, model, install, export, { deleteTarget = it },
@@ -166,7 +164,7 @@ private fun MultiCloneScreen(model: MultiCloneViewModel, importFiles: () -> Unit
                                     Text("Installation permission: ${if (model.app.installer.canInstall()) "allowed" else "not granted"}")
                                     Text("Samsung Auto Blocker or device policy may block sideloading. Complete any applicable system settings and confirmations yourself.")
                                     Text("Private app storage is separate. Browser cookies and external account brokers may still be shared. Apps requiring their original package or certificate may fail.")
-                                    Text("MultiClone ${BuildConfig.VERSION_NAME} · On-demand GitHub updates · No telemetry", style = MaterialTheme.typography.labelMedium)
+                                    Text("Version ${BuildConfig.VERSION_NAME} · On-demand GitHub updates · No telemetry", style = MaterialTheme.typography.labelMedium)
                                 }
                             }
                             }
@@ -176,12 +174,22 @@ private fun MultiCloneScreen(model: MultiCloneViewModel, importFiles: () -> Unit
                 if (!useRail) NavigationBar {
                     destinations.forEachIndexed { index, title ->
                         NavigationBarItem(selected = tab == index, onClick = { tab = index },
-                            icon = { DestinationIcon(index) }, label = { Text(title) })
+                            icon = { DestinationIcon(index) }, label = if (index == 2) null else { { Text(title) } },
+                            modifier = Modifier.semantics { contentDescription = title })
                     }
                 }
             }
+            model.cloneUpdateNotice?.let { notice ->
+                CloneUpdateBanner(notice, model::dismissCloneUpdateNotice, { updateDetails = notice.text; updateDetailsError = notice.error },
+                    Modifier.align(Alignment.BottomCenter).padding(start = if (useRail) 96.dp else 16.dp,
+                        end = 16.dp, bottom = if (useRail) 16.dp else 96.dp).widthIn(max = 640.dp))
+            }
         }
     }
+    updateDetails?.let { details -> AlertDialog(onDismissRequest = { updateDetails = null },
+        title = { Text(if (updateDetailsError) "Update needs attention" else "Clone update") },
+        text = { Text(details, Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) },
+        confirmButton = { TextButton(onClick = { updateDetails = null }) { Text("Close") } }) }
     if (model.installPromptOpen && readyClones.isNotEmpty()) {
         AlertDialog(onDismissRequest = model::dismissInstallPrompt,
             title = { Text("Your clones are ready") },
@@ -253,13 +261,15 @@ private fun MultiCloneScreen(model: MultiCloneViewModel, importFiles: () -> Unit
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CreatePanel(model: MultiCloneViewModel, source: ApkSource?, sources: List<Pair<String, String>>, importFiles: () -> Unit,
+private fun CreatePanel(model: MultiCloneViewModel, source: ApkSource?, importFiles: () -> Unit,
     importIcon: () -> Unit, beforeQueue: () -> Unit, modifier: Modifier, readyCount: Int, showReady: () -> Unit) {
-    var name by rememberSaveable(source?.id) { mutableStateOf(source?.label?.substringAfterLast('.')?.take(60).orEmpty()) }
-    var count by rememberSaveable { mutableStateOf("1") }
-    var chooseSource by remember { mutableStateOf(false) }
+    var name by rememberSaveable(model.formRevision, source?.id) { mutableStateOf("") }
+    var count by rememberSaveable(model.formRevision, source?.id) { mutableStateOf("") }
+    var cloneNames by rememberSaveable(model.formRevision, source?.id) { mutableStateOf(List(5) { "" }) }
     val quantity = count.toLongOrNull()
-    val nameError = name.isBlank() || name.length > 80
+    val individual = quantity != null && quantity in 2L..5L
+    val names = if (individual) cloneNames.take(quantity!!.toInt()) else emptyList()
+    val nameError = if (individual) names.any { it.isBlank() || it.length > 80 } else name.isBlank() || name.length > 80
     val countError = quantity == null || quantity <= 0
     Column(modifier.imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -277,7 +287,6 @@ private fun CreatePanel(model: MultiCloneViewModel, source: ApkSource?, sources:
                 FilledTonalButton(onClick = model::loadApps, enabled = !model.busy, modifier = Modifier.heightIn(min = 48.dp)) { Text("Installed apps") }
                 OutlinedButton(onClick = importFiles, enabled = !model.busy, modifier = Modifier.heightIn(min = 48.dp)) { Text("Import APKs") }
             }
-            if (sources.isNotEmpty()) TextButton(onClick = { chooseSource = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Use a previous import") }
             if (source != null) {
                 HorizontalDivider()
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -299,24 +308,36 @@ private fun CreatePanel(model: MultiCloneViewModel, source: ApkSource?, sources:
         if (source != null) {
             CompatibilitySummary(source)
             SectionCard("2", "Make it yours", "Name your copy and choose how many to create.") {
-                OutlinedTextField(name, { name = it }, label = { Text("Clone name / batch prefix") },
-                    supportingText = { Text(if (nameError) "Enter a name using 1–80 characters." else "${name.length}/80 · Batches add a number to each name") },
-                    isError = nameError, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 OutlinedTextField(count, { if (it.all(Char::isDigit)) count = it }, label = { Text("Number of clones") },
-                    supportingText = { Text(if (countError) "Enter a whole number greater than zero (up to ${Long.MAX_VALUE})." else "Each copy has separate app storage.") },
-                    isError = countError, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(), singleLine = true)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    supportingText = { Text(if (count.isBlank()) "Choose how many copies to create." else if (countError) "Enter a whole number greater than zero." else "Each copy has separate app storage.") },
+                    isError = count.isNotBlank() && countError, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth().testTag("clone-count"), singleLine = true)
+                if (individual) {
+                    Text("Name each copy", style = MaterialTheme.typography.titleMedium)
+                    names.forEachIndexed { index, value ->
+                        OutlinedTextField(value, { text -> cloneNames = cloneNames.toMutableList().also { it[index] = text } },
+                            label = { Text("Clone ${index + 1} name") },
+                            supportingText = { Text("${value.length}/80") },
+                            isError = value.length > 80, modifier = Modifier.fillMaxWidth().testTag("clone-name-${index + 1}"), singleLine = true)
+                    }
+                } else {
+                    OutlinedTextField(name, { name = it }, label = { Text(if (quantity != null && quantity > 5) "Batch prefix" else "Clone name") },
+                        supportingText = { Text(if (quantity != null && quantity > 5) "Copies are named $name 1, $name 2, …" else "${name.length}/80") },
+                        isError = name.length > 80, modifier = Modifier.fillMaxWidth().testTag("clone-label"), singleLine = true)
+                }
+                if (quantity == 1L) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = importIcon, enabled = !model.busy, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(if (model.icon == null) "Choose custom icon" else "Change custom icon")
                     }
                     if (model.icon != null) TextButton(onClick = model::clearIcon, modifier = Modifier.heightIn(min = 48.dp)) { Text("Reset icon") }
                 }
+                if (quantity != null && quantity > 1) Text("Batch copies use the original app icon.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(enabled = !model.busy && source.buildable && !nameError && !countError,
-                    onClick = { beforeQueue(); model.enqueue(source, name, quantity!!) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(16.dp)) {
+                    onClick = { beforeQueue(); model.enqueue(source, if (individual) names.first() else name, quantity!!, names) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("create-clones"), shape = RoundedCornerShape(16.dp)) {
                     Text("Create ${quantity ?: ""} ${if (quantity == 1L) "clone" else "clones"}")
                 }
                 Text("Each copy gets a unique package and signing key. When a copy is ready, an install window opens here. Large batches may pause at Android execution or storage limits.",
@@ -342,11 +363,7 @@ private fun CreatePanel(model: MultiCloneViewModel, source: ApkSource?, sources:
         }
         Spacer(Modifier.height(8.dp))
     }
-    if (chooseSource) AlertDialog(onDismissRequest = { chooseSource = false }, title = { Text("Imported sources") }, text = {
-        LazyColumn(Modifier.heightIn(max = 440.dp)) { items(sources, key = { it.first }) { (id, label) ->
-            TextButton(onClick = { model.select(id); chooseSource = false }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(label) }
-        } }
-    }, confirmButton = { TextButton(onClick = { chooseSource = false }) { Text("Close") } })
+
 }
 
 @Composable

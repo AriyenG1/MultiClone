@@ -32,7 +32,7 @@ References: [Android installer statuses](https://developer.android.com/reference
 
 1. Install `MultiClone-TestApp.apk`.
 2. In MultiClone, choose **Installed apps → MultiClone Test App**.
-3. Review analysis, choose a name and optionally an icon, set the number of clones, and tap **Create 1 clone** (or the selected batch quantity).
+3. Review the compatibility summary, set the quantity and fill in the empty name fields (or a prefix for more than five). A single copy may use a custom icon. Tap **Create 1 clone** or the selected batch quantity.
 4. Use the **Your clones are ready** window to install each generated copy. Confirm each Android installation. Choose **Later** to keep working; **Review & install** on Create or the **Library** destination lets you install later.
 5. Open the original and two copies. Give them different counters and mock account names. Close and reopen them; their state should stay independent.
 
@@ -40,7 +40,8 @@ The test app's mock account is only a local text value. It is not real authentic
 
 ## Updates and later batches
 
-- Select the same imported source and generate another clone or batch whenever needed. Batches use a shared name prefix and numbered names; each clone has a separate package and signing key.
+- Create starts empty on a fresh launch and after submitting a batch. Choose an installed app or import its APKs for each new request. Draft values survive rotation/resizing and switching destinations.
+- Set the quantity, then enter a name for each of 2–5 copies. For more than five copies, enter a batch prefix; numbers are added automatically. Single copies can use a custom icon; batches use the original icon. Each clone has a separate package and signing key.
 - For an installed clone, first update the original app through its store. Choose the single **Update** action on the clone’s Library card. MultiClone checks the installed original, rebuilds from its current base/split APKs when newer, then opens Android’s Update confirmation. Its package, signing key and existing app storage are retained. If the original is already current, no build or installation starts.
 - To test an actual upgrade, install the supplied `MultiClone-TestApp-v2.apk` over the original test app, then tap **Update** on a version-1 fixture clone. Its counter and mock account should survive.
 - Updates require the same original app identity and source certificate. Source-certificate rotation and downgrades are not supported in this release. MultiClone never uninstalls a clone to force an update.
@@ -72,6 +73,8 @@ Android isolates private app data, but an external browser or account broker can
 Split support is limited to complete, coherent APK sets available locally. Missing dynamic features and Play-delivered assets are not downloaded automatically. AAB, APKM and XAPK imports are unsupported. An `.apks` archive containing multiple alternative device variants is rejected instead of guessing which to install.
 
 ## Tablet layout
+
+The tablet rail shows Create and Library at the top, with a Settings cog at the bottom. The cog has no visible label, and remains labelled for accessibility. Update notices float above the content and disappear after five seconds; opening Details lets you continue reading. Successful installation changes the clone status without showing a success banner.
 
 Create and Library are separate screens in landscape and portrait. Wide windows use side navigation; narrow split-screen windows use bottom navigation. Compatibility warnings start collapsed: tap **Show warnings** to read them. Blocking issues remain visible and disable creation. See [the UI audit](ui/TABLET_UI_AUDIT.md) for design and skill provenance.
 

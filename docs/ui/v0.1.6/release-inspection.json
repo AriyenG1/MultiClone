@@ -1,0 +1,22 @@
+{
+  "apk": "MultiClone-v0.1.6.apk",
+  "sha256": "2126e88b0b93c382a8b2d22a8cae562d0339489bfa2ced229666444af884a4e6",
+  "package": "package: name='dev.multiclone.app' versionCode='7' versionName='0.1.6' platformBuildVersionName='17' platformBuildVersionCode='37' compileSdkVersion='37' compileSdkVersionCodename='17'",
+  "permissions": [
+    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+    "android.permission.INTERNET",
+    "android.permission.POST_NOTIFICATIONS",
+    "android.permission.QUERY_ALL_PACKAGES",
+    "android.permission.REQUEST_DELETE_PACKAGES",
+    "android.permission.REQUEST_INSTALL_PACKAGES",
+    "dev.multiclone.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+  ],
+  "certificateSha256": [
+    "81858eadd0e28320c178c3a4cbda9605b08041c07989c3f2f5bdd82d065701d5"
+  ],
+  "zipHeadersCrcPathsAndDuplicates": "passed",
+  "apkSignatureAndZipAlignment": "passed",
+  "debuggable": false,
+  "limitation": "Local packaging and permission inspection only. No Google Play Protect verdict or malware-free certification; third-party SDK behavior is not exhaustively assessed."
+}

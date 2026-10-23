@@ -17,7 +17,12 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -51,13 +56,6 @@ internal fun MultiCloneTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = colors, content = content)
 }
 
-@Composable
-internal fun AppMark() {
-    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { DestinationIcon(0) }
-    }
-}
-
 /** Consistent 24dp line icons, drawn locally without another icon dependency. Labels are on navigation items. */
 @Composable
 internal fun DestinationIcon(index: Int) {
@@ -79,12 +77,40 @@ internal fun DestinationIcon(index: Int) {
                     drawRoundRect(tint, point(x, y), Size(7f * unit, 7f * unit), CornerRadius(unit), style = stroke)
             }
             else -> {
-                for ((y, x) in listOf(6f to 8f, 12f to 16f, 18f to 8f)) {
-                    drawLine(tint, point(3f, y), point(21f, y), stroke.width)
-                    drawCircle(tint, 2.5f * unit, point(x, y))
+                val gear = Path().apply {
+                    for (i in 0 until 48) {
+                        val angle = i * Math.PI / 24 - Math.PI / 2
+                        val radius = if (i % 6 in 1..3) 10f else 7.8f
+                        val x = (12 + radius * kotlin.math.cos(angle)).toFloat() * unit
+                        val y = (12 + radius * kotlin.math.sin(angle)).toFloat() * unit
+                        if (i == 0) moveTo(x, y) else lineTo(x, y)
+                    }
+                    close()
                 }
+                drawPath(gear, tint, style = stroke)
+                drawCircle(tint, 3f * unit, point(12f, 12f), style = stroke)
             }
         }
+    }
+}
+
+@Composable
+internal fun CloneUpdateBanner(notice: CloneUpdateNotice, dismiss: () -> Unit, details: () -> Unit, modifier: Modifier = Modifier) {
+    Snackbar(modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        shape = RoundedCornerShape(20.dp),
+        containerColor = if (notice.error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.inverseSurface,
+        contentColor = if (notice.error) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.inverseOnSurface,
+        action = { TextButton(onClick = details, modifier = Modifier.heightIn(min = 48.dp)) {
+            Text("Details", color = if (notice.error) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.inversePrimary)
+        } },
+        dismissAction = { IconButton(onClick = dismiss, modifier = Modifier.size(48.dp).semantics { contentDescription = "Dismiss update notice" }) {
+            val tint = LocalContentColor.current
+            Canvas(Modifier.size(20.dp)) {
+                drawLine(tint, Offset(size.width * .25f, size.height * .25f), Offset(size.width * .75f, size.height * .75f), 2.dp.toPx())
+                drawLine(tint, Offset(size.width * .75f, size.height * .25f), Offset(size.width * .25f, size.height * .75f), 2.dp.toPx())
+            }
+        } }) {
+        Text(notice.text, maxLines = 3, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
