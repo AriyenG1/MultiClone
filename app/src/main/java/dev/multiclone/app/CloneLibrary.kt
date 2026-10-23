@@ -31,12 +31,16 @@ class CloneLibrary(private val app: MultiCloneApplication) {
             val version = installedVersion(row.packageName)
             if (version != null) {
                 installed[row.packageName] = version
-                val changed = row.state == "TESTED" && version != row.versionCode
-                if (!row.wasInstalled || changed) app.dao.saveClone(row.copy(wasInstalled = true,
-                    state = if (changed) "READY" else row.state,
-                    message = if (changed) "Installed version changed. Runtime compatibility for that version is untested." else row.message))
+                // Retire old manual testing labels without changing app data or signing identities.
+                val legacyMessage = row.message.contains("untested", true) || row.message.startsWith("Marked working by you") ||
+                    row.message == "Generated and signature verified. Install and test this app's behavior."
+                if (!row.wasInstalled || row.state == "TESTED" || legacyMessage) app.dao.saveClone(row.copy(wasInstalled = true,
+                    state = if (row.state == "TESTED") { if (version == row.versionCode) "INSTALLED" else "READY" } else row.state,
+                    message = if (legacyMessage) "" else row.message))
             } else if ((row.wasInstalled || row.state in setOf("INSTALLED", "TESTED")) && row.packageName !in installing) {
                 remove(row)
+            } else if (row.message == "Generated and signature verified. Install and test this app's behavior.") {
+                app.dao.saveClone(row.copy(message = "Generated and signature verified."))
             }
         }
         installed

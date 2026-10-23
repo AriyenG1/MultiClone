@@ -19,6 +19,9 @@ class InstallResultReceiver : BroadcastReceiver() {
                 requireNotNull(confirmation) { "Android did not supply an installation confirmation." }
                 context.startActivity(confirmation.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (e: Exception) {
+                intent.data?.lastPathSegment?.toIntOrNull()?.let { session ->
+                    runCatching { app.packageManager.packageInstaller.abandonSession(session) }
+                }
                 saveResult(app, id, false, "Android's installation confirmation could not open. Return to MultiClone and retry. ${e.message.orEmpty()}")
             }
             return
@@ -29,7 +32,7 @@ class InstallResultReceiver : BroadcastReceiver() {
 
     private fun saveResult(app: MultiCloneApplication, id: String, success: Boolean, message: String) {
         app.getSharedPreferences(InstallFeedback.PREFERENCES, 0).edit()
-            .putBoolean("failed", !success).putString("latest", message)
+            .putBoolean("failed", !success).putString("latest", message).putString("cloneId", id)
             .putLong("revision", System.nanoTime()).apply()
         val pending = goAsync()
         app.scope.launch {

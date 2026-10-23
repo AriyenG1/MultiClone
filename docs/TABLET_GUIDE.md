@@ -41,19 +41,19 @@ The test app's mock account is only a local text value. It is not real authentic
 ## Updates and later batches
 
 - Select the same imported source and generate another clone or batch whenever needed. Batches use a shared name prefix and numbered names; each clone has a separate package and signing key.
-- For an individual update, choose **Update** on its Library card, then import/select the newer original APK or complete split set and generate the update. Install that generated artifact through Android. Its identity and signing key are retained.
-- To test an actual upgrade, import the supplied `MultiClone-TestApp-v2.apk` when updating a version-1 fixture clone. Its counter and mock account should survive.
+- For an installed clone, first update the original app through its store. Choose the single **Update** action on the clone’s Library card. MultiClone checks the installed original, rebuilds from its current base/split APKs when newer, then opens Android’s Update confirmation. Its package, signing key and existing app storage are retained. If the original is already current, no build or installation starts.
+- To test an actual upgrade, install the supplied `MultiClone-TestApp-v2.apk` over the original test app, then tap **Update** on a version-1 fixture clone. Its counter and mock account should survive.
 - Updates require the same original app identity and source certificate. Source-certificate rotation and downgrades are not supported in this release. MultiClone never uninstalls a clone to force an update.
 - **Pause queue** stops active generation and preserves completed outputs. **Resume queue** continues paused requests. **Cancel batch** prevents the remaining copies; a copy already being processed may finish.
 
-## Install, export, uninstall and testing status
+## Install, export and uninstall
 
 - **Launch** opens an installed clone.
 - **Export** saves one APK or a single-set `.apks` archive. It does not export signing keys.
 - **Delete clone** removes its library record, all generated APK versions and its local signing key. For an installed clone, Android asks to uninstall first; cancellation keeps the clone. A successful uninstall removes that clone's private data and login session, then MultiClone removes the library entry/files/key. Already exported backups/files are not modified.
 - Uninstalling a previously installed clone from Android Settings or the launcher also removes it from MultiClone when package changes are received or MultiClone next resumes. Updates preserve the entry. Completed/cancelled batch rows no longer clutter the library; queued, generating and paused jobs remain visible.
 - Older **RECOVERED / Not installed** entries have a **Delete clone** action, even when no APK files remain. An identity restored from backup and never installed is retained until explicitly deleted so it can still be rebuilt.
-- **Mark tested working** records your own test result for the installed version. An update or changed installed version needs fresh testing. Generated, installed and manually tested states are distinct.
+- Never-installed clones show **Install**; installed clones show one **Update** action. A labelled progress bar covers APK preparation and waiting for Android. Cancelled or failed installation clears the pending state; retry uses a verified prepared update when available.
 
 ## Signing-key backups
 
@@ -77,7 +77,7 @@ Create and Library are separate screens in landscape and portrait. Wide windows 
 
 ## Check for updates
 
-Install v0.1.4 manually once to add the updater. Future updates can use Settings → Check for updates. A newer stable release downloads with progress, then a verified-update dialog offers Install update or Later. Android shows its own Update confirmation. If prompted, allow MultiClone to install apps, return, and tap Install update again.
+Install v0.1.4 or later manually once to add the updater. Future updates can use Settings → Check for updates. A newer stable release downloads with progress, then a verified-update dialog offers Install update or Later. Android shows its own Update confirmation. If prompted, allow MultiClone to install apps, return, and tap Install update again.
 
 Pause or finish clone generation before installation. Update in place: do not uninstall MultiClone or clear its storage. The updater checks the downloaded APK's SHA-256, package, higher Android version code and signing certificate. This release keeps the existing database schema, signing keys, generated files and preferences. Failed/cancelled downloads or installer confirmations leave the current installation intact. Device policy can still reject an update.
 

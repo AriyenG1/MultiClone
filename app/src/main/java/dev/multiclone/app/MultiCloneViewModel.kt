@@ -3,6 +3,9 @@ package dev.multiclone.app
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
+import android.content.pm.PackageInstaller
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -15,6 +18,8 @@ import kotlinx.coroutines.flow.*
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+
+data class CloneOperation(val label: String, val progress: Float? = null, val sessionId: Int? = null)
 
 class MultiCloneViewModel(application: Application) : AndroidViewModel(application) {
     val app = application as MultiCloneApplication
@@ -87,7 +92,24 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
     var messageIsError by mutableStateOf(false); private set
     var installedApps by mutableStateOf<List<InstalledApp>?>(null); private set
     var icon by mutableStateOf<File?>(null); private set
-    var updateTarget by mutableStateOf<CloneRow?>(null); private set
+    var cloneOperations by mutableStateOf<Map<String, CloneOperation>>(emptyMap()); private set
+    var installRequest by mutableStateOf<CloneRow?>(null); private set
+    fun takeInstallRequest(): CloneRow? = installRequest.also { installRequest = null }
+    private val updateGenerations = mutableSetOf<String>()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private fun operation(id: String, value: CloneOperation?) {
+        cloneOperations = if (value == null) cloneOperations - id else cloneOperations + (id to value)
+    }
+    private val sessionCallback = object : PackageInstaller.SessionCallback() {
+        override fun onCreated(sessionId: Int) { }
+        override fun onBadgingChanged(sessionId: Int) { }
+        override fun onActiveChanged(sessionId: Int, active: Boolean) { }
+        override fun onProgressChanged(sessionId: Int, progress: Float) { }
+        override fun onFinished(sessionId: Int, success: Boolean) {
+            cloneOperations.filterValues { it.sessionId == sessionId }.keys.forEach { operation(it, null) }
+            refreshInstalled()
+        }
+    }
     var installedPackages by mutableStateOf<Set<String>>(emptySet()); private set
     var installedVersions by mutableStateOf<Map<String, Long>>(emptyMap()); private set
     var exportTarget: CloneRow? = null
@@ -96,6 +118,7 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
     private val installResults = app.getSharedPreferences(InstallFeedback.PREFERENCES, 0)
     private val installListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         if (key == "revision") {
+            prefs.getString("cloneId", null)?.let { operation(it, null) }
             message = prefs.getString("latest", "").orEmpty()
             messageIsError = prefs.getBoolean("failed", false)
             refreshInstalled()
@@ -103,8 +126,10 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
     }
     init {
         installResults.registerOnSharedPreferenceChangeListener(installListener)
+        app.packageManager.packageInstaller.registerSessionCallback(sessionCallback, mainHandler)
         viewModelScope.launch {
             app.queue.generated.collect { id ->
+                if (updateGenerations.remove(id)) return@collect
                 generatedCloneIds = generatedCloneIds + id
                 if (autoOpenInstallPrompt) installPromptOpen = true
             }
@@ -123,20 +148,17 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
     private suspend fun saveSource(source: ApkSource) {
         app.dao.saveSource(SourceRow(source.id, source.label, source.packageName, JsonCodec.source(source)))
         preferences.selectSource(source.id)
-        message = if (source.buildable) "Analysis complete. Review the findings before generating clones." else "This source is blocked. See the findings below."
+        message = if (source.buildable) "" else "This source is blocked. See the findings below."
     }
     fun importIcon(uri: Uri) = action { icon = app.importer.importIcon(uri); message = "Custom icon selected." }
     fun clearIcon() { icon = null }
-    fun prepareUpdate(row: CloneRow) { updateTarget = row; message = "Import or select the newer original APK, review its findings, then generate the update." }
-    fun cancelUpdate() { updateTarget = null }
     fun enqueue(source: ApkSource, label: String, count: Long) = action {
-        app.queue.enqueue(source.id, label, count, icon, updateTarget?.id)
+        app.queue.enqueue(source.id, label, count, icon)
         withContext(Dispatchers.Main) {
             generatedCloneIds = emptySet()
             autoOpenInstallPrompt = true
             installPromptOpen = false
         }
-        updateTarget = null
         withContext(Dispatchers.Main) { startQueue() }
         message = "Added to the local generation queue. Android will ask separately before installation."
     }
@@ -144,21 +166,82 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
     fun resume() = action { app.dao.resumeJobs(); withContext(Dispatchers.Main) { startQueue() }; message = "Generation resumed." }
     fun pause() = action { app.dao.pauseJobs(); app.stopService(Intent(app, CloneService::class.java)); message = "Queue paused. Completed artifacts are retained." }
     fun cancelJob(id: String) = action { app.dao.cancelJob(id); message = "Batch cancelled. A clone already being processed may finish." }
-    fun install(row: CloneRow) = action {
-        app.queue.withCloneMutation {
-            val current = app.dao.clone(row.id) ?: error("This clone was deleted.")
-            val artifacts = CloneArtifacts(JsonCodec.plan(current.plan), JsonCodec.artifacts(current.artifacts), current.versionCode)
-            message = "Installation requested. Complete Android's confirmation."
-            app.installer.install(artifacts)
+    fun install(row: CloneRow) {
+        if (busy || row.id in cloneOperations) return
+        operation(row.id, CloneOperation("Verifying APKs…"))
+        action {
+            try {
+                app.queue.withCloneMutation {
+                    val current = app.dao.clone(row.id) ?: error("This clone was deleted.")
+                    val artifacts = CloneArtifacts(JsonCodec.plan(current.plan), JsonCodec.artifacts(current.artifacts), current.versionCode)
+                    var lastPercent = -1
+                    val session = app.installer.install(artifacts) { copied, total ->
+                        val percent = if (total > 0) (copied * 100 / total).toInt() else 0
+                        if (percent != lastPercent) {
+                            lastPercent = percent
+                            mainHandler.post {
+                                if (cloneOperations[row.id]?.sessionId == null && row.id in cloneOperations)
+                                    operation(row.id, CloneOperation("Preparing installation · $percent%", percent / 100f))
+                            }
+                        }
+                    }
+                    withContext(Dispatchers.Main) {
+                        if (app.packageManager.packageInstaller.getSessionInfo(session) != null)
+                            operation(row.id, CloneOperation("Waiting for Android · Confirm installation to continue", sessionId = session))
+                        else operation(row.id, null)
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { operation(row.id, null) }
+                throw e
+            }
         }
     }
     fun launch(row: CloneRow) = action { withContext(Dispatchers.Main) { app.installer.launch(row.packageName) } }
-    fun markTested(row: CloneRow) = action {
-        app.queue.withCloneMutation {
-            val current = app.dao.clone(row.id) ?: error("This clone was deleted.")
-            require(app.packageManager.getPackageInfo(current.packageName, 0).longVersionCode == current.versionCode) { "Install this generated version before marking it tested." }
-            app.dao.saveClone(current.copy(state = "TESTED", wasInstalled = true, message = "Marked working by you for version ${current.versionCode}. This records your testing, not automatic compatibility certification."))
-            message = "Your runtime test result was recorded for ${current.label}."
+    fun updateClone(row: CloneRow) {
+        if (busy || cloneOperations.isNotEmpty() || installRequest != null) return
+        messageIsError = false
+        message = ""
+        operation(row.id, CloneOperation("Checking original app for updates…"))
+        viewModelScope.launch {
+            try {
+                val ready = withContext(Dispatchers.IO) {
+                    app.ready.await()
+                    val current = app.dao.clone(row.id) ?: error("This clone was deleted.")
+                    val installed = app.packageManager.getPackageInfo(current.packageName, 0).longVersionCode
+                    require(app.dao.observeJobs().first().none { it.updateCloneId == row.id && it.state in setOf("QUEUED", "RUNNING", "PAUSED") }) {
+                        "An update for this clone is already queued. Resume or cancel it in the queue."
+                    }
+                    val previous = JsonCodec.source(app.dao.source(current.sourceId)?.json ?: error("Original source metadata is missing."))
+                    val originalVersion = try { app.packageManager.getPackageInfo(previous.packageName, 0).longVersionCode }
+                    catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+                        error("Install the original app (${previous.packageName}) first, then tap Update again.")
+                    }
+                    if (originalVersion <= installed && current.versionCode <= installed) return@withContext null
+                    // Reuse an already generated update after a cancelled confirmation or process restart.
+                    if (current.versionCode > installed && current.versionCode >= originalVersion &&
+                        JsonCodec.artifacts(current.artifacts).let { files -> files.isNotEmpty() && files.all { it.file.isFile && it.file.sha256() == it.sha256 } }) return@withContext current
+                    val source = app.analyzer.analyze(app.importer.importInstalled(previous.packageName), previous.label)
+                    require(source.versionCode >= installed) { "The original app is older than this clone. Update the original through its store first." }
+                    app.dao.saveSource(SourceRow(source.id, source.label, source.packageName, JsonCodec.source(source)))
+                    withContext(Dispatchers.Main) {
+                        updateGenerations.add(row.id)
+                        operation(row.id, CloneOperation("Building update · Your existing clone stays available"))
+                    }
+                    val jobId = app.queue.enqueue(source.id, current.label, 1, null, current.id)
+                    withContext(Dispatchers.Main) { startQueue() }
+                    val result = app.dao.observeJobs().first { rows -> rows.any { it.id == jobId && it.state in setOf("DONE", "PAUSED", "CANCELLED") } }.first { it.id == jobId }
+                    require(result.state == "DONE") { "Clone update ${result.state.lowercase()}: ${result.message}" }
+                    app.dao.clone(row.id) ?: error("This clone was deleted.")
+                }
+                if (ready == null) message = "${row.label} is up to date with the installed original. Check its store for newer versions."
+                else installRequest = ready
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                updateGenerations.remove(row.id)
+                message = e.message ?: "Clone update failed. Retry from the library."
+                messageIsError = true
+            } finally { operation(row.id, null) }
         }
     }
     fun refreshInstalled() {
@@ -170,12 +253,20 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
                 withContext(Dispatchers.Main) { message = e.message ?: "The clone library could not be refreshed."; messageIsError = true }
                 return@launch
             }
-            withContext(Dispatchers.Main) { installedPackages = installed.keys; installedVersions = installed }
+            val sessions = app.packageManager.packageInstaller.mySessions
+            val rows = app.dao.clones()
+            withContext(Dispatchers.Main) {
+                installedPackages = installed.keys; installedVersions = installed
+                cloneOperations.filterValues { it.sessionId != null && sessions.none { session -> session.sessionId == it.sessionId } }
+                    .keys.forEach { operation(it, null) }
+                sessions.forEach { session -> rows.find { it.packageName == session.appPackageName }?.let { row ->
+                    if (row.id !in cloneOperations) operation(row.id, CloneOperation("Waiting for Android · Complete or cancel installation", sessionId = session.sessionId))
+                } }
+            }
         }
     }
     fun deleteClone(row: CloneRow, requestUninstall: (CloneRow) -> Unit) = action {
         if (app.library.deleteIfUninstalled(row.id)) {
-            if (updateTarget?.id == row.id) updateTarget = null
             message = "${row.label} deleted from your clone library."
             refreshInstalled()
         } else withContext(Dispatchers.Main) {
@@ -221,12 +312,13 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
     fun tell(message: String) { this.message = message; messageIsError = false }
     override fun onCleared() {
         installResults.unregisterOnSharedPreferenceChangeListener(installListener)
+        app.packageManager.packageInstaller.unregisterSessionCallback(sessionCallback)
         pendingPassword?.fill('\u0000'); super.onCleared()
     }
     private fun action(block: suspend () -> Unit) {
         if (busy) return
+        busy = true
         viewModelScope.launch {
-            busy = true
             messageIsError = false
             try { withContext(Dispatchers.IO) { app.ready.await(); block() } }
             catch (e: CancellationException) { throw e }

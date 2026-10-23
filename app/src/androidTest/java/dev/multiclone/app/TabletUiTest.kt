@@ -137,4 +137,85 @@ class TabletUiTest {
             withContext(Dispatchers.Main) { model.dismissInstallPrompt() }
         }
     }
+    @Test fun libraryUpdateRebuildsFromOriginalAndPreservesDataAfterCancelledInstall(): Unit = runBlocking {
+        withTablet { source, model ->
+            device.executeShellCommand("pm uninstall ${source.packageName}")
+            suspend fun confirmInstall(id: String, accept: Boolean = true) {
+                val button = device.wait(Until.findObject(By.pkg("com.android.packageinstaller")
+                    .text(java.util.regex.Pattern.compile("(?i)install|update"))), 20000)
+                assertNotNull("Android confirmation missing: ${model.message}", button)
+                if (accept) button!!.click() else device.pressBack()
+                withTimeout(30000) {
+                    while (!app.getSharedPreferences(InstallFeedback.PREFERENCES, 0).contains("status:$id")) delay(100)
+                }
+                val status = app.getSharedPreferences(InstallFeedback.PREFERENCES, 0).getInt("status:$id", -99)
+                if (accept) assertEquals(android.content.pm.PackageInstaller.STATUS_SUCCESS, status)
+                else assertNotEquals(android.content.pm.PackageInstaller.STATUS_SUCCESS, status)
+            }
+            suspend fun installOriginal(file: File, version: Long) {
+                app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                val plan = ClonePlan.create("Update original").copy(packageName = source.packageName)
+                app.installer.install(CloneArtifacts(plan, listOf(SignedArtifact(file, null, file.sha256())), version))
+                confirmInstall(plan.id)
+            }
+            installOriginal(source.parts.single().file, 1)
+            app.queue.enqueue(source.id, "Single update proof", 1, null)
+            app.queue.run { }
+            val row = app.dao.clones().first { it.sourceId == source.id && it.label == "Single update proof" }
+            withContext(Dispatchers.Main) { model.dismissInstallPrompt() }
+            text("Library").click()
+            text(row.label)
+            assertFalse("Never-installed clones must not show Update", device.hasObject(By.text("Update")))
+            assertFalse(device.hasObject(By.text("Mark tested working")))
+            text("Install").click()
+            awaitState { row.id in model.cloneOperations }
+            confirmInstall(row.id)
+            awaitState { row.id !in model.cloneOperations && !model.busy }
+            app.installer.launch(row.packageName)
+            text("Increment").click()
+            assertTrue(device.wait(Until.hasObject(By.textContains("Count: 1")), 10000))
+            device.findObject(By.clazz("android.widget.EditText")).text = "Preserved account"
+            text("Save mock login").click()
+            assertTrue(device.wait(Until.hasObject(By.textContains("Account: Preserved account")), 10000))
+            val certificate = app.vault.getOrCreate(row.id).certificate.encoded
+            val newer = File(app.filesDir, "single-update-v2.apk")
+            instrumentation.context.assets.open("fixture-v2.apk").use { input -> newer.outputStream().use { input.copyTo(it) } }
+            installOriginal(newer, 2)
+            app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            withContext(Dispatchers.Main) { model.dismissInstallPrompt(); model.refreshInstalled() }
+            awaitState { row.packageName in model.installedPackages }
+            text("Library").click()
+            text("Your clone library")
+            assertFalse(device.hasObject(By.text("Mark tested working")))
+            assertFalse(device.hasObject(By.text("Install update")))
+            app.getSharedPreferences(InstallFeedback.PREFERENCES, 0).edit().remove("status:${row.id}").commit()
+            // The single Library action must go straight from original-APK checking to Android.
+            text("Update").click()
+            awaitState { row.id in model.cloneOperations }
+            confirmInstall(row.id, accept = false)
+            awaitState { row.id !in model.cloneOperations && !model.busy }
+            assertEquals(1L, app.packageManager.getPackageInfo(row.packageName, 0).longVersionCode)
+            assertEquals(2L, app.dao.clone(row.id)!!.versionCode)
+            text("Your clone library")
+            shot("library-update-ready")
+            val jobsBefore = app.dao.observeJobs().first().count { it.updateCloneId == row.id }
+            app.getSharedPreferences(InstallFeedback.PREFERENCES, 0).edit().remove("status:${row.id}").commit()
+            text("Update").click()
+            confirmInstall(row.id)
+            awaitState { row.id !in model.cloneOperations && !model.busy }
+            assertEquals("Retry must reuse the verified update", jobsBefore, app.dao.observeJobs().first().count { it.updateCloneId == row.id })
+            assertEquals(2L, app.packageManager.getPackageInfo(row.packageName, 0).longVersionCode)
+            assertArrayEquals(certificate, app.vault.getOrCreate(row.id).certificate.encoded)
+            assertEquals(row.packageName, app.dao.clone(row.id)!!.packageName)
+            app.installer.launch(row.packageName)
+            assertTrue(device.wait(Until.hasObject(By.textContains("Count: 1")), 10000))
+            assertTrue(device.hasObject(By.textContains("Provider: 1")))
+            assertTrue(device.hasObject(By.textContains("Account: Preserved account")))
+            app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            withContext(Dispatchers.Main) { model.updateClone(app.dao.clone(row.id)!!) }
+            awaitState { row.id !in model.cloneOperations && model.message.contains("up to date") }
+            assertEquals(jobsBefore, app.dao.observeJobs().first().count { it.updateCloneId == row.id })
+        }
+    }
+
 }

@@ -24,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.activity.compose.BackHandler
@@ -102,6 +103,9 @@ private fun MultiCloneScreen(model: MultiCloneViewModel, importFiles: () -> Unit
     val clones by model.clones.collectAsStateWithLifecycle()
     val jobs by model.jobs.collectAsStateWithLifecycle()
     val selectedId by model.selectedId.collectAsStateWithLifecycle()
+    LaunchedEffect(model.installRequest, model.busy) {
+        if (!model.busy) model.takeInstallRequest()?.let(install)
+    }
     var tab by rememberSaveableInt()
     val screenStates = rememberSaveableStateHolder()
     var installDetailsOpen by rememberSaveable { mutableStateOf(false) }
@@ -147,7 +151,7 @@ private fun MultiCloneScreen(model: MultiCloneViewModel, importFiles: () -> Unit
                                     Modifier.widthIn(max = 840.dp).fillMaxSize(),
                                     readyCount = readyClones.size, showReady = { model.openInstallPrompt() })
                                 1 -> DashboardPanel(clones, jobs, model, install, export, { deleteTarget = it },
-                                    { row -> model.prepareUpdate(row); tab = 0 }, Modifier.widthIn(max = 1040.dp).fillMaxSize())
+                                    model::updateClone, Modifier.widthIn(max = 1040.dp).fillMaxSize())
                                 else -> Column(Modifier.widthIn(max = 840.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
                                     verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     Text("Signing keys & device", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
@@ -161,7 +165,7 @@ private fun MultiCloneScreen(model: MultiCloneViewModel, importFiles: () -> Unit
                                     Text("${model.app.filesDir.usableSpace / (1024 * 1024)} MB available in private storage")
                                     Text("Installation permission: ${if (model.app.installer.canInstall()) "allowed" else "not granted"}")
                                     Text("Samsung Auto Blocker or device policy may block sideloading. Complete any applicable system settings and confirmations yourself.")
-                                    Text("Private app storage is separate. Browser cookies and external account brokers may still be shared. Apps requiring their original package or certificate may fail. Riot Mobile compatibility is untested.")
+                                    Text("Private app storage is separate. Browser cookies and external account brokers may still be shared. Apps requiring their original package or certificate may fail.")
                                     Text("MultiClone ${BuildConfig.VERSION_NAME} · On-demand GitHub updates · No telemetry", style = MaterialTheme.typography.labelMedium)
                                 }
                             }
@@ -191,7 +195,9 @@ private fun MultiCloneScreen(model: MultiCloneViewModel, importFiles: () -> Unit
                             Text(if (current == row.versionCode) "Installed · version $current" else "Ready · version ${row.versionCode}",
                                 style = MaterialTheme.typography.bodyMedium)
                             if (current == row.versionCode) OutlinedButton(onClick = { model.launch(row) }, enabled = !model.busy) { Text("Open ${row.label}") }
-                            else Button(onClick = { install(row) }, enabled = !model.busy) { Text("Install ${row.label}") }
+                            else Button(onClick = { install(row) }, enabled = !model.busy && row.id !in model.cloneOperations,
+                                modifier = Modifier.heightIn(min = 48.dp)) { Text("Install ${row.label}") }
+                            model.cloneOperations[row.id]?.let { CloneProgress(it) }
                         }
                     }
                 }
@@ -249,19 +255,18 @@ private fun MultiCloneScreen(model: MultiCloneViewModel, importFiles: () -> Unit
 @Composable
 private fun CreatePanel(model: MultiCloneViewModel, source: ApkSource?, sources: List<Pair<String, String>>, importFiles: () -> Unit,
     importIcon: () -> Unit, beforeQueue: () -> Unit, modifier: Modifier, readyCount: Int, showReady: () -> Unit) {
-    var name by rememberSaveable(source?.id, model.updateTarget?.id) { mutableStateOf(model.updateTarget?.label ?: source?.label?.substringAfterLast('.')?.take(60).orEmpty()) }
+    var name by rememberSaveable(source?.id) { mutableStateOf(source?.label?.substringAfterLast('.')?.take(60).orEmpty()) }
     var count by rememberSaveable { mutableStateOf("1") }
     var chooseSource by remember { mutableStateOf(false) }
-    val quantity = if (model.updateTarget != null) 1L else count.toLongOrNull()
+    val quantity = count.toLongOrNull()
     val nameError = name.isBlank() || name.length > 80
     val countError = quantity == null || quantity <= 0
     Column(modifier.imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(if (model.updateTarget == null) "Make room for another you." else "Update your clone",
+            Text("Make room for another you.",
                 style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
-            Text(if (model.updateTarget == null) "Create an independent copy of your app. Everything happens on your device."
-                else "Choose the same or a newer original app to update ${model.updateTarget!!.label}.",
+            Text("Create an independent copy of your app. Everything happens on your device.",
                 style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (readyCount > 0) FilledTonalButton(onClick = showReady, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -273,7 +278,6 @@ private fun CreatePanel(model: MultiCloneViewModel, source: ApkSource?, sources:
                 OutlinedButton(onClick = importFiles, enabled = !model.busy, modifier = Modifier.heightIn(min = 48.dp)) { Text("Import APKs") }
             }
             if (sources.isNotEmpty()) TextButton(onClick = { chooseSource = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Use a previous import") }
-            if (model.updateTarget != null) TextButton(onClick = model::cancelUpdate) { Text("Cancel update") }
             if (source != null) {
                 HorizontalDivider()
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -298,7 +302,7 @@ private fun CreatePanel(model: MultiCloneViewModel, source: ApkSource?, sources:
                 OutlinedTextField(name, { name = it }, label = { Text("Clone name / batch prefix") },
                     supportingText = { Text(if (nameError) "Enter a name using 1–80 characters." else "${name.length}/80 · Batches add a number to each name") },
                     isError = nameError, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                if (model.updateTarget == null) OutlinedTextField(count, { if (it.all(Char::isDigit)) count = it }, label = { Text("Number of clones") },
+                OutlinedTextField(count, { if (it.all(Char::isDigit)) count = it }, label = { Text("Number of clones") },
                     supportingText = { Text(if (countError) "Enter a whole number greater than zero (up to ${Long.MAX_VALUE})." else "Each copy has separate app storage.") },
                     isError = countError, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -313,7 +317,7 @@ private fun CreatePanel(model: MultiCloneViewModel, source: ApkSource?, sources:
                 Button(enabled = !model.busy && source.buildable && !nameError && !countError,
                     onClick = { beforeQueue(); model.enqueue(source, name, quantity!!) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(16.dp)) {
-                    Text(if (model.updateTarget == null) "Create ${quantity ?: ""} ${if (quantity == 1L) "clone" else "clones"}" else "Generate update")
+                    Text("Create ${quantity ?: ""} ${if (quantity == 1L) "clone" else "clones"}")
                 }
                 Text("Each copy gets a unique package and signing key. When a copy is ready, an install window opens here. Large batches may pause at Android execution or storage limits.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -371,7 +375,7 @@ internal fun CompatibilitySummary(source: ApkSource) {
             Text(if (blocked > 0) "Cannot create this clone" else "Compatibility review", style = MaterialTheme.typography.titleMedium,
                 color = if (blocked > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
             Text(if (blocked > 0) "$blocked blocking ${if (blocked == 1) "issue" else "issues"} · Generation unavailable"
-                else "Generation available · App behavior is untested", style = MaterialTheme.typography.bodyMedium)
+                else "Ready to create", style = MaterialTheme.typography.bodyMedium)
             Text("Some apps require their original package or signing key and may not work as a clone.", style = MaterialTheme.typography.bodySmall)
             if (source.findings.isNotEmpty()) TextButton(onClick = { expanded = !expanded },
                 modifier = Modifier.heightIn(min = 48.dp).semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }) {
@@ -425,14 +429,16 @@ private fun DashboardPanel(clones: List<CloneRow>, jobs: List<dev.multiclone.sto
                 }
                 Text(status, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                 if (row.message.isNotBlank()) Text(row.message, style = MaterialTheme.typography.bodySmall)
+                model.cloneOperations[row.id]?.let { CloneProgress(it) }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (row.artifacts != "[]") Button(onClick = { install(row) }, enabled = !model.busy) { Text(if (installed) "Install update" else "Install") }
-                    if (installed) OutlinedButton(onClick = { model.launch(row) }) { Text("Launch") }
-                    if (installed && row.state != "TESTED" && model.installedVersions[row.packageName] == row.versionCode)
-                        TextButton(onClick = { model.markTested(row) }, enabled = !model.busy) { Text("Mark tested working") }
-                    OutlinedButton(onClick = { update(row) }, enabled = !model.busy && row.state != "BUILDING") { Text("Update") }
+                    val working = row.id in model.cloneOperations
+                    if (!installed && row.artifacts != "[]") Button(onClick = { install(row) }, enabled = !model.busy && !working,
+                        modifier = Modifier.heightIn(min = 48.dp)) { Text("Install") }
+                    if (installed) Button(onClick = { update(row) }, enabled = !model.busy && model.cloneOperations.isEmpty() && row.state != "BUILDING",
+                        modifier = Modifier.heightIn(min = 48.dp)) { Text("Update") }
+                    if (installed) OutlinedButton(onClick = { model.launch(row) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Launch") }
                     if (row.artifacts != "[]") TextButton(onClick = { export(row) }, enabled = !model.busy) { Text("Export") }
-                    TextButton(onClick = { delete(row) }, enabled = !model.busy && row.state != "BUILDING") { Text("Delete clone") }
+                    TextButton(onClick = { delete(row) }, enabled = !model.busy && !working && row.state != "BUILDING") { Text("Delete clone") }
                     if (row.message.isNotBlank()) TextButton(onClick = {
                         val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("MultiClone installation details", "${row.label}\n${row.packageName}\n${row.message}"))
@@ -445,3 +451,13 @@ private fun DashboardPanel(clones: List<CloneRow>, jobs: List<dev.multiclone.sto
 
 @Composable
 private fun rememberSaveableInt() = androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
+
+@Composable
+private fun CloneProgress(operation: CloneOperation) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(operation.label, style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
+        if (operation.progress == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+        else LinearProgressIndicator(progress = { operation.progress }, modifier = Modifier.fillMaxWidth())
+    }
+}

@@ -12,7 +12,7 @@ object InstallFeedback {
 
     fun message(intent: Intent): String {
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
-        if (status == PackageInstaller.STATUS_SUCCESS) return "Installed successfully. Runtime compatibility is untested."
+        if (status == PackageInstaller.STATUS_SUCCESS) return "Installed successfully."
         val detail = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE).orEmpty().take(4000)
         val verificationFailure = detail.contains("INSTALL_FAILED_VERIFICATION_FAILURE") ||
             intent.hasExtra(LEGACY_STATUS) && intent.getIntExtra(LEGACY_STATUS, 0) == -22

@@ -13,7 +13,7 @@ import dev.multiclone.core.sha256
 class InstallCoordinator(private val context: Context, private val callbackClass: Class<*>) {
     fun canInstall() = context.packageManager.canRequestPackageInstalls()
     fun permissionIntent() = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
-    fun install(artifacts: CloneArtifacts): Int {
+    fun install(artifacts: CloneArtifacts, progress: (Long, Long) -> Unit = { _, _ -> }): Int {
         require(canInstall()) { "Allow installation from MultiClone in Android settings, then tap Install again." }
         require(artifacts.files.isNotEmpty()) { "No generated APKs are available." }
         artifacts.files.forEach { require(it.file.isFile && it.file.sha256() == it.sha256) { "Generated APK is missing or changed. Rebuild it before installation." } }
@@ -28,9 +28,21 @@ class InstallCoordinator(private val context: Context, private val callbackClass
         val id = installer.createSession(params)
         try {
             installer.openSession(id).use { session ->
+                val total = artifacts.files.sumOf { it.file.length() }
+                var copied = 0L
                 artifacts.files.forEachIndexed { index, part ->
                     session.openWrite(if (part.splitName == null) "base.apk" else "split-$index.apk", 0, part.file.length()).use { sink ->
-                        part.file.inputStream().use { it.copyTo(sink) }; session.fsync(sink)
+                        part.file.inputStream().use { input ->
+                            val buffer = ByteArray(256 * 1024)
+                            while (true) {
+                                val size = input.read(buffer)
+                                if (size < 0) break
+                                sink.write(buffer, 0, size)
+                                copied += size
+                                progress(copied, total)
+                            }
+                        }
+                        session.fsync(sink)
                     }
                 }
                 val callback = Intent(context, callbackClass).setAction("dev.multiclone.INSTALL_RESULT")

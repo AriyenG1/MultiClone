@@ -1,3 +1,18 @@
+# v0.1.5 Library and installation verification — 23 October 2026
+
+- Project-local `:app:connectedDebugAndroidTest test lint`: successful. Sixteen Android checks executed successfully, including the new original-to-clone update/cancellation/retry/data-retention flow, all engine/split/Jetchat, library, workflow and installer-feedback regressions. The optional self-updater test requiring a host-prepared higher-version APK was not run; its assumption is recorded as a failure element by the test XML writer even though the Gradle run succeeds. This unchanged optional handoff was verified for v0.1.4.
+- Four JVM signing/archive tests pass. Repository-wide lint passes with zero errors (existing warnings remain). Added the fixture's missing French feature label discovered by this broader check.
+- The follow-up focused UI check taps the actual Library Install/Update buttons and verifies that uninstalled clones have no Update action. It also checks cancellation, cached retry, no redundant up-to-date job, stable package/certificate and retained counter/provider/mock account data across version 1→2.
+- No database reset/migration, dependency lock change or signing-key change. Android confirms each installation/update; the app does not uninstall clones for updates.
+
+Evidence: [full Gradle run](v0.1.5/gradle-validation.txt), [raw Android results](v0.1.5/android-tests.xml), [button workflow](v0.1.5/button-workflow.txt), [signed release inspection](v0.1.5/release-inspection.json). Samsung hardware/One UI policy behavior remains a physical-device check.
+
+Screenshots: [single Update action after cancellation](v0.1.5/library-cancelled.png), [retained counter, provider and mock account after updating](v0.1.5/clone-data-retained.png).
+
+The installed original must be updated through its store first. The combined clone Update action reads that app's local APK set; it does not download originals from Play or an APK mirror.
+
+---
+
 # v0.1.3 UI verification — 23 October 2026
 
 ## Results

@@ -1,6 +1,12 @@
-# MultiClone v0.1.4 — implementation and verification
+# MultiClone v0.1.5 — implementation and verification
 
-Build date: 23 October 2026. Signed APK: `artifacts/MultiClone-v0.1.4.apk`. Installation instructions: [TABLET_GUIDE.md](TABLET_GUIDE.md).
+Build date: 23 October 2026. Signed APK: `artifacts/MultiClone-v0.1.5.apk`. Installation instructions: [TABLET_GUIDE.md](TABLET_GUIDE.md).
+
+## v0.1.5 clone updates and installation feedback
+
+Installed clones now have a single Update action. It checks the installed original app, reimports its current APK set and uses the existing queue to build a same-identity update, then opens Android’s confirmation directly. A cancelled update reuses the verified generated APK on retry. Up-to-date originals do not create redundant jobs; the original must first be updated through its store. The successful-analysis banner, manual testing controls and routine untested status wording are removed. Detailed compatibility findings remain collapsed and blocked sources cannot generate.
+
+Clone installation shows labelled progress for verification, APK transfer and Android’s pending confirmation. Session completion, cancellation and failures reset the progress state; session reconciliation restores pending state after reopening. Clone identity, keys and database schema remain unchanged. See [UI verification](ui/VERIFICATION.md) for v0.1.5 evidence.
 
 ## v0.1.4 app updates
 
@@ -12,7 +18,7 @@ The database schema remains 2. Existing clone files, keys and settings are retai
 
 Create and Library remain separate at all window sizes. The Material 3 interface uses window-width navigation, centered bounded forms, grouped Create controls, collapsed compatibility findings and system light/dark colors. Short windows omit the rail's decorative header to keep destinations reachable. Form and scroll state use saveable destination state.
 
-Successfully published clones and updates open an installation dialog. Choosing Later suppresses further automatic popups until the next user-submitted generation request; Review & install remains available on Create. Android's installation confirmation remains required. Long status messages and installation diagnostics use bounded previews and separate full-detail dialogs.
+Successfully published new clones open an installation dialog. Choosing Later suppresses further automatic popups until the next user-submitted generation request; Review & install remains available on Create. Android's installation confirmation remains required. Long status messages and installation diagnostics use bounded previews and separate full-detail dialogs.
 
 The two requested design skills are installed and configured in `AGENTS.md`, alongside Google's official adaptive-layout references. See [the tablet UI audit](ui/TABLET_UI_AUDIT.md), [current verification](ui/VERIFICATION.md), and [release inspection](ui/release-inspection-v0.1.3.json). The following v0.1.2 and earlier test results describe those historical releases.
 
@@ -44,7 +50,6 @@ All six instrumented tests passed on Android 16/API 36 for v0.1.1: the four exis
 - Consistent base/configuration/feature split rewriting and signing; one installer session per clone.
 - Persistent sequential batches without a product clone-count cap; pause/resume/cancellation and interruption recovery.
 - Dashboard, installation, launch, individual updates, Android-confirmed removal and artifact export/deletion.
-- Per-version user-recorded runtime test results, separate from generation and installation status.
 - Android Keystore-wrapped signing keys and authenticated password-encrypted key/metadata backups.
 - On-demand GitHub updates; no telemetry or automatic cloud/device-transfer backup.
 

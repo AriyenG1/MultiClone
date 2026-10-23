@@ -87,7 +87,7 @@ class CloneQueue(private val app: MultiCloneApplication) {
                             require(staging.renameTo(ready)) { "Could not publish completed artifacts." }
                             val files = generated.map { it.copy(file = File(ready, it.file.name)) }
                             app.dao.saveClone(row.copy(sourceId = source.id, artifacts = JsonCodec.artifacts(files), versionCode = source.versionCode,
-                                state = "READY", message = "Generated and signature verified. Install and test this app's behavior."))
+                                state = "READY", message = "Generated and signature verified."))
                             completed++
                             app.dao.job(job.id)?.let { current ->
                                 app.dao.saveJob(current.copy(completed = completed, state = if (completed == job.total) "DONE" else current.state, message = ""))
