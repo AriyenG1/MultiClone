@@ -1,0 +1,33 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="10" failures="0" errors="0" skipped="0" time="0.000" timestamp="2026-10-22T21:53:08" hostname="localhost">
+  <testsuite name="dev.multiclone.app.CloneLibraryTest" tests="4" failures="0" errors="0" skipped="0" time="5.435" timestamp="2026-10-22T21:53:08" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="pendingInstallIsPreservedUntilSessionEnds" classname="dev.multiclone.app.CloneLibraryTest" time="0.344" />
+    <testcase name="deleteRemovesRecoveredRecordKeysAllArtifactVersionsAndPendingUpdates" classname="dev.multiclone.app.CloneLibraryTest" time="0.306" />
+    <testcase name="cancelledUninstallKeepsCloneAndExternalUninstallRemovesLibraryFilesAndKey" classname="dev.multiclone.app.CloneLibraryTest" time="4.591" />
+    <testcase name="versionOneDatabaseMigratesWithoutLosingRecords" classname="dev.multiclone.app.CloneLibraryTest" time="0.194" />
+  </testsuite>
+  <testsuite name="dev.multiclone.app.EngineProofTest" tests="3" failures="0" errors="0" skipped="0" time="37.522" timestamp="2026-10-22T21:53:08" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="independentJetchatCloneLaunches" classname="dev.multiclone.app.EngineProofTest" time="12.458" />
+    <testcase name="compiledApkProducesInstallableIsolatedClones" classname="dev.multiclone.app.EngineProofTest" time="18.858" />
+    <testcase name="baseAndLanguageSplitCloneInstallTogether" classname="dev.multiclone.app.EngineProofTest" time="6.206" />
+  </testsuite>
+  <testsuite name="dev.multiclone.app.InstallFeedbackTest" tests="2" failures="0" errors="0" skipped="0" time="0.389" timestamp="2026-10-22T21:53:08" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="broadStatusesDoNotInventAVerifierRejection" classname="dev.multiclone.app.InstallFeedbackTest" time="0.001" />
+    <testcase name="verificationFailureWithAbortedStatusReplacesPendingBannerAndPersistsDetails" classname="dev.multiclone.app.InstallFeedbackTest" time="0.388" />
+  </testsuite>
+  <testsuite name="dev.multiclone.app.WorkflowTest" tests="1" failures="0" errors="0" skipped="0" time="6.822" timestamp="2026-10-22T21:53:08" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="batchQueueRecoveryAndSigningBackup" classname="dev.multiclone.app.WorkflowTest" time="6.822" />
+  </testsuite>
+</testsuites>

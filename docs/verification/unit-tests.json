@@ -1,0 +1,16 @@
+[
+  {
+    "name": "dev.multiclone.signing.BackupCipherTest",
+    "tests": "2",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "dev.multiclone.engine.ArchiveGuardTest",
+    "tests": "2",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  }
+]

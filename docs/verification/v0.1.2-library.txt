@@ -1,0 +1,39 @@
+22 October 2026 — MultiClone v0.1.2, version code 3, Room schema 2
+
+Android 16/API 36 ARM64 emulator:
+ANDROID_SERIAL=emulator-5554 scripts/gradle-local.sh :app:connectedDebugAndroidTest :app:lintDebug
+BUILD SUCCESSFUL in 59s. JUnit: tests=10, failures=0, errors=0.
+
+CloneLibraryTest (four checks):
+- deleteRemovesRecoveredRecordKeysAllArtifactVersionsAndPendingUpdates
+  Deletes the record, key, old/new APK directories and interrupted staging files;
+  cancels its queued/paused update; keeps another never-installed restored clone/key;
+  hides terminal batch history in the ViewModel and retains paused jobs; repeat deletion succeeds.
+- cancelledUninstallKeepsCloneAndExternalUninstallRemovesLibraryFilesAndKey
+  Builds a fixture clone on-device and installs it through Android confirmation.
+  Cancels the real Android uninstall prompt and verifies record/key/package remain.
+  Uninstalls outside MultiClone while at Home and reconciles; record, all APKs and key disappear.
+- pendingInstallIsPreservedUntilSessionEnds
+  A matching installer session prevents automatic or explicit cleanup; after abandonment,
+  a previously installed missing clone is removed.
+- versionOneDatabaseMigratesWithoutLosingRecords
+  Creates the exact v1 schema and unique package index; opens it with Room migration 1->2;
+  retains clone/source/job records and marks the old installed clone as previously installed.
+
+Previous six checks also pass: compiled APK cloning/isolation/updating/uninstalling;
+Google Jetchat; base/configuration/feature splits; batch/recovery/signing backup;
+specific verifier-failure feedback; broad installer-status explanations.
+
+Android 17/API 37 signed-release upgrade:
+Existing v0.1.1 (version code 2) updated to v0.1.2 (version code 3), adb install -r Success.
+Original firstInstallTime remains 2026-10-22 23:04:40.
+Migrated existing clone dev.multiclone.generated.c75c6f8c09ce94c3e8202f598b66a3a24 remains installed v1.
+Dashboard retains one clone, hides the former DONE batch row, shows Installed v1 and Delete clone.
+Final signed-build UI smoke: Delete clone -> application confirmation -> Android Uninstall.
+After confirming, the dashboard shows 0 clones / 0 installed with no DONE/RECOVERED row
+or stale removal-confirmation banner. Screenshot: artifacts/MultiClone-library-v0.1.2.png.
+Final lint after the callback/count-text polish: BUILD SUCCESSFUL in 12s, no errors.
+Final APK inspection: docs/verification/v0.1.2-release-inspection.json.
+
+Play Protect is not present in the emulator images. These checks neither reproduce nor
+resolve the reported Google risk classification on the physical Samsung tablet.

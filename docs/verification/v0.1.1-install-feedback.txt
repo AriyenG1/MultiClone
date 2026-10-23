@@ -1,0 +1,33 @@
+22 October 2026 — MultiClone v0.1.1 (version code 2)
+
+Build/lint: :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug — BUILD SUCCESSFUL; no lint errors.
+Android 16/API 36 ARM64 emulator: :app:connectedDebugAndroidTest — BUILD SUCCESSFUL in 57s.
+JUnit result: tests=6, failures=0, errors=0.
+Existing tests: compiled-APK cloning/isolation/update/removal; independent Jetchat; base/configuration/feature splits; batch/recovery/signing backup.
+New tests:
+- verificationFailureWithAbortedStatusReplacesPendingBannerAndPersistsDetails
+  Uses installer status 3 (ABORTED), INSTALL_FAILED_VERIFICATION_FAILURE, optional legacy -22,
+  related-package and session details. Verifies receiver-to-Room persistence and live ViewModel
+  failure banner, repeated identical result notification and subsequent success feedback.
+- broadStatusesDoNotInventAVerifierRejection
+  Distinguishes aborted, blocked and invalid status explanations; optional legacy -22 also
+  identifies verification failure without requiring a raw error string.
+
+Signed release: scripts/package-release.sh — completed; APK signature and ZIP alignment verified.
+Certificate SHA-256 digests from apksigner match between v0.1.0 and v0.1.1.
+Android 17/API 37 signed-release update:
+- Before: versionCode=1, versionName=0.1.0, firstInstallTime=2026-10-22 23:04:40.
+- adb install --no-incremental -r artifacts/MultiClone-v0.1.1.apk — Success.
+- After: versionCode=2, versionName=0.1.1, firstInstallTime unchanged.
+- Dashboard retained: 1 generated record, 1 installed.
+- Existing package: dev.multiclone.generated.c75c6f8c09ce94c3e8202f598b66a3a24.
+- Existing record: INSTALLED, installed version 1, artifact version 1.
+- New Copy details action visible.
+
+Physical Galaxy Tab S9 FE+ report (v0.1.0, user screenshot):
+Riot Mobile com.riotgames.mobile.leagueconnect, version 508001003, four APKs.
+Android result: Installation failed (3): INSTALL_FAILED_VERIFICATION_FAILURE:
+Install not allowed for file:///data/app/vmdl1495914801.tmp.
+User reports no separate system warning. Responsible verifier/rule unknown.
+v0.1.1 has not yet been tested on that tablet. No security setting or APK processing
+change is included to override the rejection. Riot runtime remains untested.

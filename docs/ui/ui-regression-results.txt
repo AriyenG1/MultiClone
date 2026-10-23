@@ -1,0 +1,10 @@
+
+dev.multiclone.app.TabletUiTest:..
+dev.multiclone.app.WorkflowTest:.
+dev.multiclone.app.InstallFeedbackTest:..
+
+Time: 36.745
+
+OK (5 tests)
+
+

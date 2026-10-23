@@ -1,0 +1,12 @@
+PASS: Android 17/API 37, ARM64 standard emulator.
+Installed signed MultiClone v0.1.0 with a full local APK installation.
+Confirmed package flags have no DEBUGGABLE flag; minSdk 28, targetSdk 36.
+Selected MultiClone Test App using the installed-app picker.
+Analyzed and generated a clone entirely through the release UI.
+Granted notification permission through Android's prompt.
+Granted per-source APK installation permission through Android Settings.
+Installed generated clone through Android's Install confirmation.
+Confirmed dashboard transitioned READY -> INSTALLED and showed installed APK version 1.
+Release-generated package: dev.multiclone.generated.c75c6f8c09ce94c3e8202f598b66a3a24.
+No appops grant or root was used for this release UI smoke test.
+Confirmed release-generated clone launches with Provider: 0 and Account: signed out.
