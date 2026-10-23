@@ -37,7 +37,7 @@ Installation success is distinct from artifact generation. Android owns confirma
 
 Each clone's RSA key is encrypted with AES-GCM under an Android Keystore wrapping key. Export rewraps keys and clone metadata in a versioned AES-GCM envelope using PBKDF2-HMAC-SHA256, 600,000 iterations, a random 16-byte salt and a random 12-byte nonce. The envelope header is authenticated. Existing keys cannot be replaced by a conflicting backup certificate.
 
-MultiClone declares no INTERNET permission and includes no telemetry. Cloud backup and device transfer are excluded; recovery uses the explicit encrypted export. Credentials and other apps' private data are never imported.
+MultiClone includes no telemetry. Its internet permission supports user-requested GitHub update checks and downloads only. Cloud backup and device transfer are excluded; recovery uses the explicit encrypted export. Credentials and other apps' private data are never imported.
 
 ## Build reproducibility
 

@@ -1,6 +1,12 @@
-# MultiClone v0.1.3 — implementation and verification
+# MultiClone v0.1.4 — implementation and verification
 
-Build date: 23 October 2026. Signed APK: `artifacts/MultiClone-v0.1.3.apk`. Installation instructions: [TABLET_GUIDE.md](TABLET_GUIDE.md).
+Build date: 23 October 2026. Signed APK: `artifacts/MultiClone-v0.1.4.apk`. Installation instructions: [TABLET_GUIDE.md](TABLET_GUIDE.md).
+
+## v0.1.4 app updates
+
+Settings now checks the public GitHub latest stable release on request. Newer numeric versions download over bounded HTTPS with progress/cancellation, SHA-256 verification and package/version/signature validation. Android's normal APK installer confirms the in-place update. Active generation must be paused or finished first. INTERNET permission is now required solely for these user-requested checks/downloads.
+
+The database schema remains 2. Existing clone files, keys and settings are retained in app storage. Eight relevant Android checks pass, including live GitHub metadata; an emulator upgrade from v0.1.3 retained all 16 recorded database/preferences/key files byte-for-byte. Additional installer handoff evidence and limitations are in [the updater verification](updates/README.md).
 
 ## v0.1.3 tablet interface
 
@@ -40,7 +46,7 @@ All six instrumented tests passed on Android 16/API 36 for v0.1.1: the four exis
 - Dashboard, installation, launch, individual updates, Android-confirmed removal and artifact export/deletion.
 - Per-version user-recorded runtime test results, separate from generation and installation status.
 - Android Keystore-wrapped signing keys and authenticated password-encrypted key/metadata backups.
-- No INTERNET permission, telemetry or automatic cloud/device-transfer backup.
+- On-demand GitHub updates; no telemetry or automatic cloud/device-transfer backup.
 
 ## Verified
 
@@ -63,7 +69,7 @@ The v0.1.0 engine's four instrumented tests passed on both ARM64 Android 16/API 
 
 Four JVM unit tests pass: backup randomization/round-trip/tamper/wrong-password handling, short-passphrase rejection, archive path traversal rejection, and false expanded-size metadata rejection. The final archive checks also passed the complete Android 16 suite.
 
-Debug and release builds pass. Lint has no errors. Remaining warnings concern pinned dependency updates, the chosen target SDK, space-estimation suggestions and an unused third-party Bouncy Castle TLS helper. MultiClone performs no network operations and has no INTERNET permission.
+Debug and release builds pass. Lint has no errors. Remaining warnings concern pinned dependency updates, the chosen target SDK, space-estimation suggestions and an unused third-party Bouncy Castle TLS helper. Versions through v0.1.3 had no network permission. Starting with v0.1.4, user-requested GitHub updates use HTTPS with the platform TLS implementation.
 
 The signed release passes signature and ZIP alignment verification. A separate Android 17 release-UI smoke test imported an installed app, generated a clone, granted installation permission through Android Settings, installed through the system confirmation and reconciled the dashboard to Installed. The installed release is non-debuggable. Emitted APK runtime dependencies are version-locked; Gradle artifacts are checked against SHA-256 metadata. The project-local toolchain leaves global Java settings unchanged.
 

@@ -29,6 +29,59 @@ class MultiCloneViewModel(application: Application) : AndroidViewModel(applicati
     private var autoOpenInstallPrompt = true
     fun openInstallPrompt() { installPromptOpen = true }
     fun dismissInstallPrompt() { installPromptOpen = false; autoOpenInstallPrompt = false }
+    private val updater = AppUpdater(app)
+    private var updateJob: Job? = null
+    var checkingUpdate by mutableStateOf(false); private set
+    var updateProgress by mutableStateOf<Int?>(null); private set
+    var updateStatus by mutableStateOf(""); private set
+    var updateDialog by mutableStateOf(false); private set
+    var updateReady by mutableStateOf(false); private set
+    var availableVersion by mutableStateOf(""); private set
+    private var updateFile: File? = null
+    fun dismissUpdateDialog() { updateDialog = false }
+    fun showUpdateDialog() {
+        if (updateFile?.isFile == true) updateDialog = true
+        else { updateReady = false; updateStatus = "The cached update is no longer available. Check for updates again." }
+    }
+    fun cancelUpdateDownload() { updateJob?.cancel() }
+    fun checkForAppUpdate() {
+        if (checkingUpdate) return
+        updateJob = viewModelScope.launch {
+            checkingUpdate = true; updateReady = false; availableVersion = ""; updateProgress = null; updateFile = null; updateDialog = false
+            updateStatus = "Checking GitHub for updates…"
+            try {
+                val release = withContext(Dispatchers.IO) { updater.latest() }
+                if (!AppUpdater.newer(release.version, BuildConfig.VERSION_NAME)) {
+                    updateStatus = "You're up to date (v${BuildConfig.VERSION_NAME})."
+                } else {
+                    availableVersion = release.version
+                    updateStatus = "Downloading v${release.version}…"
+                    updateFile = withContext(Dispatchers.IO) { updater.download(release) { percent ->
+                        withContext(Dispatchers.Main) { updateProgress = percent }
+                    } }
+                    updateStatus = "v${release.version} verified and ready to install."
+                    updateReady = true
+                    updateDialog = true
+                }
+            } catch (e: CancellationException) {
+                updateStatus = "Download cancelled. Your installed app is unchanged."
+                throw e
+            } catch (e: Exception) {
+                updateStatus = "Update check/download failed: ${e.message ?: "Check your connection and retry."}"
+            } finally { checkingUpdate = false; updateProgress = null }
+        }
+    }
+    fun installAppUpdate(openInstaller: (Intent) -> Unit) {
+        if (busy || checkingUpdate) return
+        action {
+            require(app.dao.observeJobs().first().none { it.state in setOf("RUNNING", "QUEUED") }) {
+                "Pause or finish clone generation before updating MultiClone."
+            }
+            val file = updateFile ?: error("Check for updates again to download the APK.")
+            val intent = updater.installIntent(file)
+            withContext(Dispatchers.Main) { openInstaller(intent) }
+        }
+    }
     var busy by mutableStateOf(false); private set
     var message by mutableStateOf(""); private set
     var messageIsError by mutableStateOf(false); private set

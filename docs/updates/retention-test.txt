@@ -1,0 +1,4 @@
+Performing Streamed Install
+Success
+Before upgrade: 16 database/preferences/key files recorded.
+PASS: in-place v0.1.3 -> v0.1.4 upgrade retained all recorded DB, preferences and signing-key bytes.

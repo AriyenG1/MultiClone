@@ -21,6 +21,7 @@ def run(tool, *args):
 
 permissions = sorted(re.findall(r"uses-permission(?:-sdk-\d+)?: name='([^']+)'", run("aapt2", "dump", "permissions")))
 expected = {
+    "android.permission.INTERNET",
     "android.permission.QUERY_ALL_PACKAGES", "android.permission.REQUEST_INSTALL_PACKAGES",
     "android.permission.REQUEST_DELETE_PACKAGES", "android.permission.FOREGROUND_SERVICE",
     "android.permission.FOREGROUND_SERVICE_DATA_SYNC", "android.permission.POST_NOTIFICATIONS",

@@ -2,7 +2,7 @@
 
 ## First installation
 
-1. Transfer `artifacts/MultiClone-v0.1.3.apk` to the Galaxy Tab S9 FE+.
+1. Transfer `artifacts/MultiClone-v0.1.4.apk` to the Galaxy Tab S9 FE+.
 2. Open it in My Files and complete Android's installation prompts. Allow that source to install APKs if requested.
 3. Open MultiClone. After this point, cloning and management run locally on the tablet; no computer, root, Shizuku or work profile is required.
 4. When you first install a generated clone, allow **MultiClone** under Android's **Install unknown apps** settings, then return and tap Install again. This permission is separate from My Files' permission.
@@ -11,7 +11,7 @@ Samsung Auto Blocker or device policy can block sideloading. Use the applicable 
 
 ## Updating MultiClone itself
 
-Install v0.1.3 over v0.1.0, v0.1.1 or v0.1.2 through Android's normal update prompt. They use the same release certificate. The library database migrates in place. Keep MultiClone installed and retain its storage so its remaining signing keys, clone records and APKs remain available. An encrypted signing backup is also available in Settings.
+Install v0.1.4 over an existing signed MultiClone release through Android's normal update prompt. They use the same release certificate. The library database migrates in place. Keep MultiClone installed and retain its storage so its remaining signing keys, clone records and APKs remain available. An encrypted signing backup is also available in Settings.
 
 ## “INSTALL_FAILED_VERIFICATION_FAILURE: Install not allowed”
 
@@ -74,3 +74,11 @@ Split support is limited to complete, coherent APK sets available locally. Missi
 ## Tablet layout
 
 Create and Library are separate screens in landscape and portrait. Wide windows use side navigation; narrow split-screen windows use bottom navigation. Compatibility warnings start collapsed: tap **Show warnings** to read them. Blocking issues remain visible and disable creation. See [the UI audit](ui/TABLET_UI_AUDIT.md) for design and skill provenance.
+
+## Check for updates
+
+Install v0.1.4 manually once to add the updater. Future updates can use Settings → Check for updates. A newer stable release downloads with progress, then a verified-update dialog offers Install update or Later. Android shows its own Update confirmation. If prompted, allow MultiClone to install apps, return, and tap Install update again.
+
+Pause or finish clone generation before installation. Update in place: do not uninstall MultiClone or clear its storage. The updater checks the downloaded APK's SHA-256, package, higher Android version code and signing certificate. This release keeps the existing database schema, signing keys, generated files and preferences. Failed/cancelled downloads or installer confirmations leave the current installation intact. Device policy can still reject an update.
+
+GitHub checks happen only on request. No account or GitHub token is required. Updates must use the existing signing certificate and a larger versionCode as well as a newer numeric versionName. Signing-certificate rotation is intentionally rejected by this updater.

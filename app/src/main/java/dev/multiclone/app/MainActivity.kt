@@ -73,6 +73,12 @@ class MainActivity : ComponentActivity() {
                 export = { row -> model.exportTarget = row; exportPicker.launch(row.label.replace(Regex("[^\\p{L}\\p{N}._ -]"), "_") + if (JsonCodec.artifacts(row.artifacts).size == 1) ".apk" else ".apks") },
                 backup = { password, restore -> model.pendingPassword?.fill('\u0000'); model.pendingPassword = password
                     if (restore) restorePicker.launch(arrayOf("*/*")) else backupPicker.launch("MultiClone-signing-backup.mclone") },
+                installAppUpdate = {
+                    if (!model.app.installer.canInstall()) {
+                        startActivity(model.app.installer.permissionIntent())
+                        model.tell("Allow installation from MultiClone, return here, then tap Install update again.")
+                    } else model.installAppUpdate { startActivity(it) }
+                },
                 beforeQueue = { if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) },
             ) }
         }
@@ -91,7 +97,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun MultiCloneScreen(model: MultiCloneViewModel, importFiles: () -> Unit, importIcon: () -> Unit,
     install: (CloneRow) -> Unit, uninstall: (CloneRow) -> Unit, export: (CloneRow) -> Unit,
-    backup: (CharArray, Boolean) -> Unit, beforeQueue: () -> Unit) {
+    backup: (CharArray, Boolean) -> Unit, beforeQueue: () -> Unit, installAppUpdate: () -> Unit) {
     val sources by model.sources.collectAsStateWithLifecycle()
     val clones by model.clones.collectAsStateWithLifecycle()
     val jobs by model.jobs.collectAsStateWithLifecycle()
@@ -145,6 +151,7 @@ private fun MultiCloneScreen(model: MultiCloneViewModel, importFiles: () -> Unit
                                 else -> Column(Modifier.widthIn(max = 840.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
                                     verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     Text("Signing keys & device", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+                                    AppUpdateCard(model, installAppUpdate, jobs.any { it.state in setOf("RUNNING", "QUEUED") })
                                     Text("Back up your keys", style = MaterialTheme.typography.titleLarge)
                                     Text("Signing keys let existing clones receive updates. Back them up before uninstalling or resetting MultiClone. Backups include clone identities and source metadata, but no app sessions, source APKs or login data.")
                                     Button(onClick = { backupMode = false }, enabled = !model.busy) { Text("Export encrypted backup") }
@@ -155,7 +162,7 @@ private fun MultiCloneScreen(model: MultiCloneViewModel, importFiles: () -> Unit
                                     Text("Installation permission: ${if (model.app.installer.canInstall()) "allowed" else "not granted"}")
                                     Text("Samsung Auto Blocker or device policy may block sideloading. Complete any applicable system settings and confirmations yourself.")
                                     Text("Private app storage is separate. Browser cookies and external account brokers may still be shared. Apps requiring their original package or certificate may fail. Riot Mobile compatibility is untested.")
-                                    Text("MultiClone ${BuildConfig.VERSION_NAME} · No network permission · No telemetry", style = MaterialTheme.typography.labelMedium)
+                                    Text("MultiClone ${BuildConfig.VERSION_NAME} · On-demand GitHub updates · No telemetry", style = MaterialTheme.typography.labelMedium)
                                 }
                             }
                             }
@@ -197,6 +204,11 @@ private fun MultiCloneScreen(model: MultiCloneViewModel, importFiles: () -> Unit
             confirmButton = { TextButton(onClick = model::dismissInstallPrompt) { Text("Done") } },
             dismissButton = { TextButton(onClick = model::dismissInstallPrompt) { Text("Later") } })
     }
+    if (model.updateDialog) AlertDialog(onDismissRequest = model::dismissUpdateDialog,
+        title = { Text("Update MultiClone to v${model.availableVersion}?") },
+        text = { Text("The download and signing certificate have been verified. Android will ask you to confirm the update. Your clone library, signing keys and settings stay in the existing app storage. Pause generation before installing.") },
+        confirmButton = { TextButton(onClick = installAppUpdate, enabled = !model.busy && jobs.none { it.state in setOf("RUNNING", "QUEUED") }) { Text("Install update") } },
+        dismissButton = { TextButton(onClick = model::dismissUpdateDialog) { Text("Later") } })
     if (installDetailsOpen) AlertDialog(onDismissRequest = { installDetailsOpen = false },
         title = { Text("Installation details") },
         text = { Text(model.message, Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) },

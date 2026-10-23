@@ -1,0 +1,8 @@
+
+dev.multiclone.app.AppUpdaterTest:.
+
+Time: 4.573
+
+OK (1 test)
+
+

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.4 — 2026-10-23
+
+- Settings update check against the public GitHub latest stable release.
+- Bounded HTTPS downloads with progress, cancellation and SHA-256 verification.
+- Package, higher versionCode and matching signing-certificate checks before Android installation.
+- Android-confirmed in-place updates preserve the existing database, settings and signing keys.
+- Adds INTERNET permission for these user-requested updates only.
+
 ## v0.1.3 — 2026-10-23
 
 - Adaptive Material 3 tablet interface with separate Create and Library destinations.

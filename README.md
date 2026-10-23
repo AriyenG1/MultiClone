@@ -3,7 +3,7 @@
 [Download the latest release](https://github.com/AriyenG1/MultiClone/releases/latest) · [Installation guide](docs/TABLET_GUIDE.md) · [Changelog](CHANGELOG.md)
 
 A local Android APK cloning project for stock Android, written in Kotlin and Jetpack Compose.
-Version 0.1.3 adds an adaptive Material 3 tablet interface, collapsed compatibility details and an in-context install window. It includes the reusable clone workflow, persistent batches, individual updates and encrypted signing backups. Its library shows current clones and active jobs, with complete clone deletion and removal after a confirmed Android uninstall. See [STATUS.md](docs/STATUS.md) for verified capabilities, [TABLET_GUIDE.md](docs/TABLET_GUIDE.md) for installation, and [PLAY_PROTECT.md](docs/PLAY_PROTECT.md) for the reported Google warning and review process.
+Version 0.1.4 adds Settings → Check for updates, verified GitHub downloads and Android-confirmed in-place updates. Version 0.1.3 added an adaptive Material 3 tablet interface, collapsed compatibility details and an in-context install window. It includes the reusable clone workflow, persistent batches, individual updates and encrypted signing backups. Its library shows current clones and active jobs, with complete clone deletion and removal after a confirmed Android uninstall. See [STATUS.md](docs/STATUS.md) for verified capabilities, [TABLET_GUIDE.md](docs/TABLET_GUIDE.md) for installation, and [PLAY_PROTECT.md](docs/PLAY_PROTECT.md) for the reported Google warning and review process.
 
 MultiClone creates new Android packages and signing identities. Clones start with fresh app data. Existing credentials are never copied. Repackaging can break login, signature permissions, verified links, native code and integrity checks; successful generation does not establish runtime compatibility. No protections are bypassed.
 
@@ -36,7 +36,7 @@ Override `MULTICLONE_JAVA_HOME` and `MULTICLONE_SDK` to use another installation
 - `app`: Android application and Compose controls.
 - `test-app`: Apache-2.0 isolation fixture with persistent counter, local mock account and private content provider.
 
-MultiClone has no INTERNET permission. Generated applications retain their own permissions and networking. External browser cookies or account brokers can still be shared during third-party authentication.
+MultiClone uses internet permission only for user-requested GitHub update checks and APK downloads. No clone metadata, signing keys or app data is sent. Generated applications retain their own permissions and networking. External browser cookies or account brokers can still be shared during third-party authentication.
 
 ## Compatibility policy
 
